@@ -1,0 +1,505 @@
+{% extends 'roster/base.html' %}
+{% load static %}
+
+{% block title %}{{ player.name }} - MLB 선수 분석{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                {% if player.photo_url %}
+                <img src="{{ player.photo_url }}" alt="{{ player.name }}" class="img-fluid rounded mb-2" style="max-height: 150px;">
+                {% else %}
+                <div class="bg-light rounded d-flex align-items-center justify-content-center mb-2" style="height: 150px;">
+                    <span class="text-muted">사진 없음</span>
+                </div>
+                {% endif %}
+                <h5 class="card-title">{{ player.name }}</h5>
+                <p class="card-text text-muted">{{ player.team|default:"FA" }} · {{ player.get_position_display|default:"—" }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-9">
+        <div class="card mb-3">
+            <div class="card-header">적정 가치 (예측)</div>
+            <div class="card-body">
+                {% if player.prediction %}
+                <h3 class="mb-0">${{ player.prediction.predicted_value|floatformat:0 }}</h3>
+                <small class="text-muted">MRP 기반 예측 가치 (Mock)</small>
+                {% else %}
+                <p class="text-muted mb-0">예측 데이터 없음</p>
+                {% endif %}
+            </div>
+        </div>
+        {% if player.prediction and player.prediction.next_year_avg or player.prediction.next_year_era %}
+        <div class="card mb-3">
+            <div class="card-header">미래 성적 예측 (다음 시즌)</div>
+            <div class="card-body">
+                <div class="row g-2">
+                    {% if player.prediction.next_year_avg %}
+                    <div class="col-auto"><strong>AVG</strong> {{ player.prediction.next_year_avg }}</div>
+                    <div class="col-auto"><strong>HR</strong> {{ player.prediction.next_year_hr|default:"—" }}</div>
+                    <div class="col-auto"><strong>OPS</strong> {{ player.prediction.next_year_ops|default:"—" }}</div>
+                    {% if player.prediction.next_year_war %}<div class="col-auto"><strong>WAR</strong> {{ player.prediction.next_year_war }}</div>{% endif %}
+                    {% if player.prediction.next_year_woba %}<div class="col-auto"><strong>wOBA</strong> {{ player.prediction.next_year_woba }}</div>{% endif %}
+                    {% if player.prediction.next_year_wrc_plus %}<div class="col-auto"><strong>wRC+</strong> {{ player.prediction.next_year_wrc_plus }}</div>{% endif %}
+                    {% endif %}
+                    {% if player.prediction.next_year_era %}
+                    <div class="col-auto"><strong>ERA</strong> {{ player.prediction.next_year_era }}</div>
+                    {% if player.prediction.next_year_fip %}<div class="col-auto"><strong>FIP</strong> {{ player.prediction.next_year_fip }}</div>{% endif %}
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        {% if forecast_data %}
+        <div class="card">
+            <div class="card-header">미래 성적 예측</div>
+            <div class="card-body">
+                <h6 class="mb-2">향후 10년 예측 (Mock)</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>연도</th>
+                                {% if is_batter %}
+                                <th>AVG</th>
+                                <th>HR</th>
+                                <th>OPS</th>
+                                <th>WAR</th>
+                                <th>wOBA</th>
+                                <th>wRC+</th>
+                                {% else %}
+                                <th>ERA</th>
+                                <th>FIP</th>
+                                <th>WAR</th>
+                                <th>K/9</th>
+                                <th>BB/9</th>
+                                {% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for year, row in forecast_data %}
+                            <tr>
+                                <td class="fw-semibold">{{ year }}</td>
+                                {% if is_batter %}
+                                <td>{{ row.avg }}</td>
+                                <td>{{ row.hr }}</td>
+                                <td>{{ row.ops }}</td>
+                                <td>{{ row.war }}</td>
+                                <td>{{ row.woba }}</td>
+                                <td>{{ row.wrc_plus }}</td>
+                                {% else %}
+                                <td>{{ row.era }}</td>
+                                <td>{{ row.fip }}</td>
+                                <td>{{ row.war }}</td>
+                                <td>{{ row.k_per_9 }}</td>
+                                <td>{{ row.bb_per_9 }}</td>
+                                {% endif %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">성적 변화 추이</div>
+    <div class="card-body">
+        <div class="row align-items-end g-2 mb-2">
+            <div class="col-auto">
+                <label for="metricSelect" class="form-label mb-0"><strong>지표</strong></label>
+            </div>
+            <div class="col-md-4">
+                <select id="metricSelect" class="form-select form-select-sm"></select>
+            </div>
+            <div class="col-auto">
+                <label for="horizonSelect" class="form-label mb-0"><strong>전망 년수</strong></label>
+            </div>
+            <div class="col-md-2">
+                <select id="horizonSelect" class="form-select form-select-sm"></select>
+            </div>
+            <div class="col">
+                <small class="text-muted">미래 예측은 점선, 밴드는 불확실성(가상)입니다.</small>
+            </div>
+        </div>
+        <canvas id="statsChart" height="80"></canvas>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">시즌별 성적</div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th>연도</th>
+                            <th>팀</th>
+                            {% if is_batter %}
+                            <th>AVG</th>
+                            <th>HR</th>
+                            <th>OPS</th>
+                            <th>WAR</th>
+                            <th>wOBA</th>
+                            <th>wRC+</th>
+                            <th>BABIP</th>
+                            <th>OPS+</th>
+                            {% else %}
+                            <th>ERA</th>
+                            <th>SO</th>
+                            <th>WHIP</th>
+                            <th>WAR</th>
+                            <th>FIP</th>
+                            <th>xFIP</th>
+                            <th>K/9</th>
+                            <th>BB/9</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in seasons %}
+                        <tr>
+                            <td>{{ s.year }}</td>
+                            <td>{{ s.team|default:"—" }}</td>
+                            {% if is_batter %}
+                            <td>{{ s.avg }}</td>
+                            <td>{{ s.hr }}</td>
+                            <td>{{ s.ops }}</td>
+                            <td>{{ s.war|default:"—" }}</td>
+                            <td>{{ s.woba|default:"—" }}</td>
+                            <td>{{ s.wrc_plus|default:"—" }}</td>
+                            <td>{{ s.babip|default:"—" }}</td>
+                            <td>{{ s.ops_plus|default:"—" }}</td>
+                            {% else %}
+                            <td>{{ s.era }}</td>
+                            <td>{{ s.so }}</td>
+                            <td>{{ s.whip }}</td>
+                            <td>{{ s.war|default:"—" }}</td>
+                            <td>{{ s.fip|default:"—" }}</td>
+                            <td>{{ s.xfip|default:"—" }}</td>
+                            <td>{{ s.k_per_9|default:"—" }}</td>
+                            <td>{{ s.bb_per_9|default:"—" }}</td>
+                            {% endif %}
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="10" class="text-center text-muted">데이터 없음</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">유사 선수</div>
+            <div class="card-body">
+                {% for sim_player, sim_score in similar_data %}
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <a href="{% url 'mlb:player_detail' sim_player.pk %}">{{ sim_player.name }}</a>
+                    <span class="badge bg-secondary">{% widthratio sim_score 100 1 %}% 유사</span>
+                </div>
+                {% empty %}
+                <p class="text-muted mb-0">유사 선수 데이터 없음</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">시뮬레이션 — 스탯 조정 시 예측 가치</div>
+    <div class="card-body">
+        <p class="text-muted small">주요 스탯을 조정하면 예측 가치가 실시간으로 업데이트됩니다. (플레이스홀더)</p>
+        <div class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label">AVG</label>
+                <input type="range" class="form-range" id="simAvg" min="0.2" max="0.35" step="0.01" value="0.28">
+                <span id="simAvgVal">0.280</span>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">HR</label>
+                <input type="number" class="form-control" id="simHr" min="0" max="60" value="30">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">OPS</label>
+                <input type="number" class="form-control" id="simOps" min="0.5" max="1.2" step="0.01" value="0.85">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">예측 가치</label>
+                <div class="fs-4" id="simValue">$0</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<a href="{% url 'mlb:search' %}" class="btn btn-outline-secondary">검색으로 돌아가기</a>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="{% static 'mlb/js/simulation.js' %}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const ctx = document.getElementById('statsChart');
+    if (ctx) {
+        const seasons = {{ seasons_json|safe }};
+        const prediction = {{ prediction_json|safe }};
+        const metricSelect = document.getElementById('metricSelect');
+        const horizonSelect = document.getElementById('horizonSelect');
+
+        function seededRand(seed) {
+            let t = seed >>> 0;
+            return function() {
+                t += 0x6D2B79F5;
+                let x = t;
+                x = Math.imul(x ^ (x >>> 15), x | 1);
+                x ^= x + Math.imul(x ^ (x >>> 7), x | 61);
+                return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+            };
+        }
+
+        function hashStringToSeed(str) {
+            let h = 2166136261;
+            for (let i = 0; i < str.length; i++) {
+                h ^= str.charCodeAt(i);
+                h = Math.imul(h, 16777619);
+            }
+            return h >>> 0;
+        }
+
+        function lastNonNull(arr) {
+            for (let i = arr.length - 1; i >= 0; i--) {
+                if (arr[i] !== null && arr[i] !== undefined) return arr[i];
+            }
+            return null;
+        }
+
+        const seasonsSorted = [...seasons].sort((a, b) => a.year - b.year);
+        const labels = seasonsSorted.map(s => s.year);
+        const lastYear = labels.length ? labels[labels.length - 1] : null;
+        const nextYear = lastYear ? (parseInt(lastYear, 10) + 1) : null;
+        const seed = hashStringToSeed(String(nextYear ?? '') + '|' + String(labels[0] ?? '') + '|' + JSON.stringify(seasonsSorted).slice(0, 64));
+        const rand = seededRand(seed);
+
+        const series = {
+            AVG: seasonsSorted.map(s => s.avg ? parseFloat(s.avg) : null),
+            OPS: seasonsSorted.map(s => s.ops ? parseFloat(s.ops) : null),
+            HR: seasonsSorted.map(s => (s.hr ?? null)),
+            WAR: seasonsSorted.map(s => s.war ? parseFloat(s.war) : null),
+            'wRC+': seasonsSorted.map(s => (s.wrc_plus ?? null)),
+            ERA: seasonsSorted.map(s => s.era ? parseFloat(s.era) : null),
+            FIP: seasonsSorted.map(s => s.fip ? parseFloat(s.fip) : null),
+        };
+
+        const isBatter = series.AVG.some(v => v !== null);
+        const metricDefs = isBatter ? [
+            { key: 'AVG', color: 'rgb(75, 192, 192)', band: 0.010, clamp: [0.15, 0.45], predKey: 'next_year_avg' },
+            { key: 'OPS', color: 'rgb(255, 99, 132)', band: 0.030, clamp: [0.40, 1.30], predKey: 'next_year_ops' },
+            { key: 'HR', color: 'rgb(54, 162, 235)', band: 5, clamp: [0, 80], predKey: 'next_year_hr' },
+            { key: 'WAR', color: 'rgb(255, 159, 64)', band: 0.5, clamp: [-2, 12], predKey: 'next_year_war' },
+            { key: 'wRC+', color: 'rgb(153, 102, 255)', band: 10, clamp: [40, 220], predKey: 'next_year_wrc_plus' },
+        ] : [
+            { key: 'ERA', color: 'rgb(255, 99, 132)', band: 0.30, clamp: [0.50, 8.00], predKey: 'next_year_era' },
+            { key: 'FIP', color: 'rgb(54, 162, 235)', band: 0.30, clamp: [0.50, 7.50], predKey: 'next_year_fip' },
+            { key: 'WAR', color: 'rgb(255, 159, 64)', band: 0.4, clamp: [-2, 10], predKey: 'next_year_war' },
+        ];
+
+        function clamp(v, lo, hi) {
+            return Math.max(lo, Math.min(hi, v));
+        }
+
+        function getPredictionValue(def, actualArr, allowExplicit) {
+            const raw = allowExplicit && prediction ? prediction[def.predKey] : null;
+            if (raw !== null && raw !== undefined && raw !== '') {
+                return typeof raw === 'number' ? raw : parseFloat(raw);
+            }
+
+            // 가상 예측 생성 (예측 모델 전까지)
+            const last = lastNonNull(actualArr);
+            if (last === null || last === undefined) return null;
+
+            // 작은 변동 + 평균회귀 느낌
+            const noise = (rand() - 0.5) * 2; // [-1, 1]
+            let next = last;
+            if (def.key === 'HR') next = Math.round(last + noise * 6 + 2); // 약간 증가/감소
+            else if (def.key === 'wRC+') next = Math.round(last + noise * 12);
+            else if (def.key === 'WAR') next = last + noise * 0.8;
+            else if (def.key === 'ERA' || def.key === 'FIP') next = last + noise * 0.35;
+            else next = last + noise * (def.band * 0.8);
+
+            return clamp(next, def.clamp[0], def.clamp[1]);
+        }
+
+        function rgbaFromRgb(rgb, a) {
+            return rgb.replace('rgb', 'rgba').replace(')', `, ${a})`);
+        }
+
+        function buildDatasets(def) {
+            const actual = series[def.key] ?? [];
+            const lastActual = lastNonNull(actual);
+            const horizon = parseInt(horizonSelect.value || '10', 10);
+
+            const baseLabels = [...labels];
+            const futureVals = [];
+            if (nextYear && lastActual !== null && lastActual !== undefined) {
+                let allowExplicit = true;
+                const workArr = actual.slice();
+                for (let i = 0; i < horizon; i++) {
+                    const val = getPredictionValue(def, workArr, allowExplicit);
+                    if (val === null || val === undefined || Number.isNaN(val)) break;
+                    futureVals.push(val);
+                    workArr.push(val);
+                    allowExplicit = false;
+                }
+            }
+
+            const showFuture = !!nextYear && futureVals.length > 0;
+            if (showFuture) {
+                for (let i = 0; i < futureVals.length; i++) {
+                    baseLabels.push(nextYear + i);
+                }
+            }
+
+            const actualLine = [...actual, ...new Array(showFuture ? futureVals.length : 0).fill(null)];
+
+            const bandLower = new Array(actualLine.length).fill(null);
+            const bandUpper = new Array(actualLine.length).fill(null);
+            const dashed = new Array(actualLine.length).fill(null);
+
+            if (showFuture) {
+                // 마지막 "실제 값이 존재하는" 시즌 인덱스를 기준으로 예측을 연결
+                let idxLast = -1;
+                for (let i = actual.length - 1; i >= 0; i--) {
+                    if (actual[i] !== null && actual[i] !== undefined) {
+                        idxLast = i;
+                        break;
+                    }
+                }
+                if (idxLast === -1) {
+                    // 실제 값이 전혀 없으면 예측도 표시하지 않음
+                    return {
+                        labels: baseLabels,
+                        datasets: [],
+                    };
+                }
+
+                const startVal = actual[idxLast] ?? lastActual ?? futureVals[0];
+                // 마지막 시즌은 관측값이 확정이므로 밴드가 한 점으로 수렴
+                dashed[idxLast] = startVal;
+                bandLower[idxLast] = startVal;
+                bandUpper[idxLast] = startVal;
+
+                for (let i = 0; i < futureVals.length; i++) {
+                    const idx = actual.length + i;
+                    const v = futureVals[i];
+                    dashed[idx] = v;
+                    bandLower[idx] = v - def.band;
+                    bandUpper[idx] = v + def.band;
+                }
+            }
+
+            const band = showFuture ? [
+                {
+                    label: `${def.key} (예측 하한)`,
+                    data: bandLower,
+                    borderColor: 'rgba(0,0,0,0)',
+                    backgroundColor: 'rgba(0,0,0,0)',
+                    pointRadius: 0,
+                    tension: 0.1,
+                },
+                {
+                    label: `${def.key} (예측 범위)`,
+                    data: bandUpper,
+                    borderColor: 'rgba(0,0,0,0)',
+                    backgroundColor: rgbaFromRgb(def.color, 0.14),
+                    fill: '-1',
+                    pointRadius: 0,
+                    tension: 0.1,
+                },
+            ] : [];
+
+            const forecastLine = showFuture ? [{
+                label: `${def.key} (예측)`,
+                data: dashed,
+                borderColor: def.color,
+                borderDash: [6, 6],
+                pointRadius: 3,
+                tension: 0.1,
+            }] : [];
+
+            return {
+                labels: baseLabels,
+                datasets: [
+                    ...band,
+                    {
+                        label: def.key,
+                        data: actualLine,
+                        borderColor: def.color,
+                        pointRadius: 3,
+                        tension: 0.1,
+                    },
+                    ...forecastLine,
+                ],
+            };
+        }
+
+        // dropdown 채우기
+        metricSelect.innerHTML = '';
+        metricDefs.forEach((d, idx) => {
+            const opt = document.createElement('option');
+            opt.value = d.key;
+            opt.textContent = d.key;
+            if (idx === 0) opt.selected = true;
+            metricSelect.appendChild(opt);
+        });
+
+        horizonSelect.innerHTML = '';
+        [1, 3, 5, 10].forEach((val) => {
+            const opt = document.createElement('option');
+            opt.value = String(val);
+            opt.textContent = `${val}년`;
+            if (val === 10) opt.selected = true;
+            horizonSelect.appendChild(opt);
+        });
+
+        let chart = null;
+        function renderSelected() {
+            const selectedKey = metricSelect.value;
+            const def = metricDefs.find(d => d.key === selectedKey) ?? metricDefs[0];
+            const built = buildDatasets(def);
+
+            if (chart) chart.destroy();
+
+            chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: built.labels,
+                datasets: built.datasets
+            },
+            options: {
+                responsive: true,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: {
+                        labels: {
+                            filter: (item) => !item.text.includes('예측 하한')
+                        }
+                    }
+                },
+                scales: { y: { beginAtZero: false } }
+            }
+            });
+        }
+
+        metricSelect.addEventListener('change', renderSelected);
+        horizonSelect.addEventListener('change', renderSelected);
+        renderSelected();
+    }
+});
+</script>
+{% endblock %}

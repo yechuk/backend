@@ -1,0 +1,133 @@
+{% extends 'roster/base.html' %}
+{% load static %}
+
+{% block title %}Leaderboard - 야구팀 매니저{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="{% static 'mlb/css/leaderboard.css' %}">
+{% endblock %}
+
+{% block content %}
+<section class="bp-shell">
+    <form method="get" class="bp-filters">
+        <span class="bp-filters-label">Filters</span>
+        <select name="season" class="bp-filter-pill" onchange="this.form.submit()">
+            {% for season in season_options %}
+            <option value="{{ season }}" {% if selected_season == season|stringformat:"s" %}selected{% endif %}>Season - {{ season }}</option>
+            {% endfor %}
+        </select>
+        <select class="bp-filter-pill" disabled>
+            <option>Level - MLB</option>
+        </select>
+        <select class="bp-filter-pill" disabled>
+            <option>League</option>
+        </select>
+        <select name="team" class="bp-filter-pill" onchange="this.form.submit()">
+            <option value="">Team</option>
+            {% for team in team_options %}
+            <option value="{{ team }}" {% if selected_team == team %}selected{% endif %}>{{ team }}</option>
+            {% endfor %}
+        </select>
+        <select class="bp-filter-pill" disabled>
+            <option>Parent Org</option>
+        </select>
+        <select name="pa_range" class="bp-filter-pill" onchange="this.form.submit()">
+            {% for option in pa_range_options %}
+            <option value="{{ option.value }}" {% if selected_pa_range == option.value %}selected{% endif %}>PA - {{ option.label }}</option>
+            {% endfor %}
+        </select>
+        <select class="bp-filter-pill" disabled>
+            <option>Position</option>
+        </select>
+        <select name="age" class="bp-filter-pill" onchange="this.form.submit()">
+            {% for age in age_ranges %}
+            <option value="{{ age.value }}" {% if selected_age_range == age.value %}selected{% endif %}>Age{% if age.value %} - {{ age.label }}{% endif %}</option>
+            {% endfor %}
+        </select>
+        <select class="bp-filter-pill" disabled>
+            <option>Date</option>
+        </select>
+    </form>
+
+    <div class="bp-tabs">
+        <a class="bp-tab {% if active_tab == 'summary' %}active{% endif %}" href="?season={{ selected_season }}&team={{ selected_team }}&pa_range={{ selected_pa_range }}&age={{ selected_age_range }}&tab=summary">Summary</a>
+        <a class="bp-tab {% if active_tab == 'standard' %}active{% endif %}" href="?season={{ selected_season }}&team={{ selected_team }}&pa_range={{ selected_pa_range }}&age={{ selected_age_range }}&tab=standard">Standard</a>
+        <a class="bp-tab {% if active_tab == 'deserved_totals' %}active{% endif %}" href="?season={{ selected_season }}&team={{ selected_team }}&pa_range={{ selected_pa_range }}&age={{ selected_age_range }}&tab=deserved_totals">Deserved Totals</a>
+        <a class="bp-tab {% if active_tab == 'deserved_rates' %}active{% endif %}" href="?season={{ selected_season }}&team={{ selected_team }}&pa_range={{ selected_pa_range }}&age={{ selected_age_range }}&tab=deserved_rates">Deserved Rates</a>
+        <a class="bp-tab {% if active_tab == 'plate_discipline' %}active{% endif %}" href="?season={{ selected_season }}&team={{ selected_team }}&pa_range={{ selected_pa_range }}&age={{ selected_age_range }}&tab=plate_discipline">Plate Discipline</a>
+        <a class="bp-tab {% if active_tab == 'batted_ball' %}active{% endif %}" href="?season={{ selected_season }}&team={{ selected_team }}&pa_range={{ selected_pa_range }}&age={{ selected_age_range }}&tab=batted_ball">Batted Ball</a>
+    </div>
+
+    <div class="bp-meta">
+        <div>Showing <strong>{{ showing_count }}</strong> of <strong>{{ total_count }}</strong> records <a class="bp-reset" href="{% url 'mlb:search' %}">Reset Filters</a></div>
+        <a class="bp-download" href="?download=1">Download CSV</a>
+    </div>
+
+    <div class="bp-table-wrap">
+        {% if rows %}
+        <div class="bp-table-scroll">
+            <table class="bp-table">
+                <thead>
+                    <tr>
+                        <th>Rank</th>
+                        <th>Name</th>
+                        <th>Age</th>
+                        <th>Season</th>
+                        <th>Team</th>
+                        <th>G</th>
+                        <th>PA</th>
+                        <th>AB</th>
+                        <th>R</th>
+                        <th>HR</th>
+                        <th>RBI</th>
+                        <th>SB</th>
+                        <th>BB%</th>
+                        <th>K%</th>
+                        <th>ISO</th>
+                        <th>AVG</th>
+                        <th>OBP</th>
+                        <th>SLG</th>
+                        <th>OPS</th>
+                        <th>DRC+</th>
+                        <th>DRB</th>
+                        <th>DRP</th>
+                        <th>WARP</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows %}
+                    <tr>
+                        <td class="bp-rank">{{ row.rank }}</td>
+                        <td class="bp-name">{% if row.player_pk %}<a href="{% url 'mlb:player_detail' row.player_pk %}">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</td>
+                        <td>{{ row.age }}</td>
+                        <td>{{ row.season }}</td>
+                        <td class="bp-team">{{ row.team_display }}</td>
+                        <td>{{ row.g }}</td>
+                        <td>{{ row.pa }}</td>
+                        <td>{{ row.ab }}</td>
+                        <td>{{ row.r }}</td>
+                        <td>{{ row.hr }}</td>
+                        <td>{{ row.rbi }}</td>
+                        <td>{{ row.sb }}</td>
+                        <td>{{ row.bb_pct_display }}</td>
+                        <td>{{ row.k_pct_display }}</td>
+                        <td>{{ row.iso_display }}</td>
+                        <td>{{ row.avg_display }}</td>
+                        <td>{{ row.obp_display }}</td>
+                        <td>{{ row.slg_display }}</td>
+                        <td>{{ row.ops_display }}</td>
+                        <td>{{ row.drc_plus }}</td>
+                        <td>{{ row.drb_display }}</td>
+                        <td>{{ row.drp_display }}</td>
+                        <td>{{ row.warp_display }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="bp-empty">리더보드 데이터가 없습니다. <code>data/bp_export_20260312.csv</code> 파일을 확인하세요.</div>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

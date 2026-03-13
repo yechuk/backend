@@ -1,0 +1,16 @@
+{% extends 'roster/base.html' %}
+
+{% block title %}{% if form.instance.pk %}계약 수정{% else %}계약 추가{% endif %} - {{ player.name }}{% endblock %}
+
+{% block content %}
+<h1>{% if form.instance.pk %}계약 수정{% else %}계약 추가{% endif %}: {{ player.name }}</h1>
+
+<form method="post">
+    {% csrf_token %}
+    <div class="mb-3">
+        {{ form.as_p }}
+    </div>
+    <button type="submit" class="btn btn-primary">계약 저장</button>
+    <a href="{% url 'roster:player_detail' player.pk %}" class="btn btn-outline-secondary">취소</a>
+</form>
+{% endblock %}

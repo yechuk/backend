@@ -1,0 +1,58 @@
+{% extends 'roster/base.html' %}
+
+{% block title %}{{ player.name }} - 야구팀 매니저{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>{{ player.name }}</h1>
+    <div>
+        <a href="{% url 'roster:player_edit' player.pk %}" class="btn btn-primary">수정</a>
+        {% if player.status == 'active' %}
+            <form method="post" action="{% url 'roster:player_kick_out' player.pk %}" class="d-inline" onsubmit="return confirm('{{ player.name }} 선수를 방출하시겠습니까?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger">방출</button>
+            </form>
+        {% endif %}
+    </div>
+</div>
+
+<dl class="row">
+    <dt class="col-sm-2">포지션</dt>
+    <dd class="col-sm-10">{{ player.position }}</dd>
+
+    <dt class="col-sm-2">등번호</dt>
+    <dd class="col-sm-10">{{ player.jersey_number|default:"—" }}</dd>
+
+    <dt class="col-sm-2">은퇴까지 남은 연수</dt>
+    <dd class="col-sm-10">{{ player.years_to_retirement|default:"—" }}</dd>
+
+    <dt class="col-sm-2">상태</dt>
+    <dd class="col-sm-10">
+        <span class="badge {% if player.status == 'active' %}bg-success{% elif player.status == 'pending' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+            {{ player.get_status_display }}
+        </span>
+    </dd>
+
+    {% if player.contract %}
+    <dt class="col-sm-2">계약</dt>
+    <dd class="col-sm-10">
+        <p class="mb-1">총액: ${{ player.contract.total_value|floatformat:0 }}</p>
+        <p class="mb-1">보장 비율: {{ player.contract.guaranteed_ratio }} (보장액 ${{ player.contract.guaranteed_amount|floatformat:0 }})</p>
+        <p class="mb-1">계약 연수: {{ player.contract.years }}년</p>
+        <p class="mb-1"><strong>순자산: ${{ player.contract.net_worth|floatformat:0 }}</strong></p>
+        <a href="{% url 'roster:contract_edit' player.pk %}" class="btn btn-sm btn-outline-secondary">계약 수정</a>
+    </dd>
+    {% else %}
+    <dt class="col-sm-2">계약</dt>
+    <dd class="col-sm-10">
+        <span class="text-muted">등록된 계약이 없습니다.</span>
+        <a href="{% url 'roster:contract_edit' player.pk %}" class="btn btn-sm btn-outline-secondary ms-2">계약 추가</a>
+    </dd>
+    {% endif %}
+
+    <dt class="col-sm-2">등록일</dt>
+    <dd class="col-sm-10">{{ player.created_at|date:"Y년 n월 j일" }}</dd>
+</dl>
+
+<a href="{% url 'roster:player_list' %}" class="btn btn-outline-secondary">명단으로 돌아가기</a>
+{% endblock %}

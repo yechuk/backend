@@ -1,0 +1,15 @@
+---
+description: ARCHITECTURE.md 문서 작성 시 문체 규칙
+globs: ARCHITECTURE.md
+alwaysApply: false
+---
+
+# ARCHITECTURE.md 문체 규칙
+
+ARCHITECTURE.md 및 관련 아키텍처 문서는 **~한다체**로 통일한다.
+
+- ~합니다 → ~한다
+- ~됩니다 → ~된다
+- ~입니다 → ~이다
+- ~있습니다 → ~있다
+- ~했습니다 → ~했다

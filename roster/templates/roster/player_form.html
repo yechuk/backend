@@ -1,0 +1,16 @@
+{% extends 'roster/base.html' %}
+
+{% block title %}{% if object %}{{ object.name }} 수정{% else %}선수 추가{% endif %} - 야구팀 매니저{% endblock %}
+
+{% block content %}
+<h1>{% if object %}{{ object.name }} 수정{% else %}선수 추가{% endif %}</h1>
+
+<form method="post">
+    {% csrf_token %}
+    <div class="mb-3">
+        {{ form.as_p }}
+    </div>
+    <button type="submit" class="btn btn-primary">{% if object %}저장{% else %}선수 추가{% endif %}</button>
+    <a href="{% if object %}{% url 'roster:player_detail' object.pk %}{% else %}{% url 'roster:player_list' %}{% endif %}" class="btn btn-outline-secondary">취소</a>
+</form>
+{% endblock %}

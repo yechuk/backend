@@ -1,0 +1,81 @@
+{% extends 'roster/base.html' %}
+
+{% block title %}선수 명단 - 야구팀 매니저{% endblock %}
+
+{% block content %}
+<h1>선수 명단</h1>
+
+<div class="mb-3">
+    <form method="get" class="d-inline-flex gap-2">
+        <select name="status" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
+            <option value="">전체 상태</option>
+            <option value="active" {% if request.GET.status == 'active' %}selected{% endif %}>활성</option>
+            <option value="pending" {% if request.GET.status == 'pending' %}selected{% endif %}>대기</option>
+            <option value="released" {% if request.GET.status == 'released' %}selected{% endif %}>방출</option>
+        </select>
+    </form>
+</div>
+
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>이름</th>
+            <th>포지션</th>
+            <th>등번호</th>
+            <th>은퇴까지 남은 연수</th>
+            <th>상태</th>
+            <th>순자산</th>
+            <th>작업</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for player in players %}
+        <tr>
+            <td><a href="{% url 'roster:player_detail' player.pk %}">{{ player.name }}</a></td>
+            <td>{{ player.position }}</td>
+            <td>{{ player.jersey_number|default:"—" }}</td>
+            <td>{{ player.years_to_retirement|default:"—" }}</td>
+            <td>
+                <span class="badge {% if player.status == 'active' %}bg-success{% elif player.status == 'pending' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+                    {{ player.get_status_display }}
+                </span>
+            </td>
+            <td>
+                {% if player.contract %}
+                    ${{ player.contract.net_worth|floatformat:0 }}
+                {% else %}
+                    —
+                {% endif %}
+            </td>
+            <td>
+                <a href="{% url 'roster:player_detail' player.pk %}" class="btn btn-sm btn-outline-primary">보기</a>
+                {% if player.status == 'active' %}
+                    <form method="post" action="{% url 'roster:player_kick_out' player.pk %}" class="d-inline" onsubmit="return confirm('{{ player.name }} 선수를 방출하시겠습니까?');">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-sm btn-outline-danger">방출</button>
+                    </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="7" class="text-center text-muted">등록된 선수가 없습니다.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if is_paginated %}
+<nav>
+    <ul class="pagination">
+        {% if page_obj.has_previous %}
+            <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}">이전</a></li>
+        {% endif %}
+        <li class="page-item disabled"><span class="page-link">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }} 페이지</span></li>
+        {% if page_obj.has_next %}
+            <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}">다음</a></li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}
