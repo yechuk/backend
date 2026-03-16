@@ -178,6 +178,7 @@ sequenceDiagram
 - 확인한 주제: MLB 구단이 FA(자유계약선수)를 평가할 때 과거 성적만 보는 것이 아니라, 미래 퍼포먼스와 예상 가치를 어떻게 투영하는지 설명하는 내용
 - 우리 프로젝트와의 연결점: 선수의 시장 계약 금액을 그대로 따르기보다, 구단 관점에서 미래 성과 기반의 적정 가치를 추정해야 한다는 문제의식과 맞닿아 있음
 - 비고: 영상 페이지 전문을 직접 확보한 것은 아니고, 공개 소개 문구를 바탕으로 핵심 주제를 요약한 메모임
+- 비고: 팀원 **변준영** 조사 참고 자료
 
 ## 5. 선수 가치 평가 모델 (Player Valuation Model)
 
@@ -224,7 +225,7 @@ flowchart LR
     Cost --> NetMRP
 ```
 
-위 파이프라인은 **1년간** 구단 순이익 증가분(Net MRP)을 구하는 과정이다. 한편, 해당 선수가 **1, 2, … n년 뒤** 각 시점의 Net MRP도 구하고, 이를 **현재가치로 할인**하여 평생 구단 기여도를 하나의 지표로 보고 싶을 수 있다. 이때 **DCF(Discounted Cash Flow)** 모델을 사용한다. 6.4.2·6.7에서 언급한 **선수 미래 실적 예측 모델**로 t+1, t+2, … t+n년 실적을 예측하고, 각 연도별로 동일한 가치 평가 파이프라인(승률→수익→MRP→Net MRP)을 적용한 뒤, 할인율을 적용해 현재가치로 합산한다.
+위 파이프라인은 **1년 단위**로 선수의 `MRP`와, 비용 가정이 포함될 경우 `Net MRP`를 구하는 과정이다. 한편 실제 의사결정이 **N년 계약**이라면, 해당 선수가 계약 기간 **1, 2, …, N년 차**에 창출할 것으로 예상되는 `MRP`를 **현재가치로 할인**해, 구단이 그 선수에게 지급할 수 있는 **적정 compensation의 현재가치(PV)** 를 추정할 수 있다. 이때 **DCF(Discounted Cash Flow)** 모델을 사용한다. 6.4.2·6.7에서 언급한 **선수 미래 실적 예측 모델**로 t+1, t+2, … t+N년 실적을 예측하고, 각 연도별로 동일한 가치 평가 파이프라인(승률→수익→MRP)을 적용한 뒤, 할인율을 적용해 현재가치로 합산한다.
 
 ```mermaid
 flowchart TB
@@ -240,14 +241,14 @@ flowchart TB
         P1[승률·수익 모델]
         P2[승률·수익 모델]
         Pn[승률·수익 모델]
-        N1["1년차 Net MRP"]
-        N2["2년차 Net MRP"]
-        Nn["n년차 Net MRP"]
+        N1["1년차 MRP"]
+        N2["2년차 MRP"]
+        Nn["N년차 MRP"]
     end
     
     subgraph dcf [" "]
         Discount[할인율 적용]
-        PV["현재가치로 할인한 평생 Net MRP"]
+        PV["N년 계약의 적정 compensation PV"]
     end
     
     PFM --> Y1
@@ -267,14 +268,15 @@ flowchart TB
 ```
 
 - **선수 미래 실적 예측 모델**: 6.7의 유사 선수 기반 예측 또는 시계열(LSTM) 모델로 t+1, t+2, … t+n 시즌의 성적 지표를 예측한다.
-- **연도별 Net MRP**: 각 연도 예측 실적을 5.1과 동일한 승률·수익 파이프라인에 넣어 해당 연도 시점의 MRP를 구하고, 비용을 차감해 Net MRP를 산출한다.
-- **DCF**: 각 연도 Net MRP를 할인율로 현재가치로 환산한 뒤 합산하여, 평생 구단 기여도의 현재가치(NPV)를 구한다.
+- **연도별 MRP**: 각 연도 예측 실적을 5.1과 동일한 승률·수익 파이프라인에 넣어 해당 연도 시점의 MRP를 구한다.
+- **DCF**: 각 연도 MRP를 할인율로 현재가치로 환산한 뒤 합산하여, N년 계약 기준으로 구단이 선수에게 지급할 수 있는 적정 compensation의 현재가치(PV)를 구한다. 이 해석은 Solow & Krautmann (2020)의 `ex ante player value` 접근과도 맞닿아 있다.
+- **계약 비교**: 실제 계약안이 있으면 해당 계약의 연도별 compensation도 현재가치로 할인하여, `적정 compensation PV - 실제 compensation PV`를 계약 surplus로 해석할 수 있다.
 
 $$
-\text{NPV} = \frac{\text{Net MRP}_1}{(1+r)} + \frac{\text{Net MRP}_2}{(1+r)^2} + \cdots + \frac{\text{Net MRP}_N}{(1+r)^N}
+\text{PV}_{\text{comp}} = \frac{\text{MRP}_1}{(1+r)} + \frac{\text{MRP}_2}{(1+r)^2} + \cdots + \frac{\text{MRP}_N}{(1+r)^N}
 $$
 
-(r: 할인율, N: 평가 연수, Net MRP_t: t=1,2,…,N인 해당 연도(1년차~N년차) Net MRP)
+(r: 할인율, N: 계약 연수, MRP_t: t=1,2,…,N인 해당 연도(1년차~N년차)의 MRP)
 
 ### 5.2. 팀 승률 모델 (Team Winning Function)
 
@@ -346,6 +348,10 @@ flowchart LR
   - Tickets sold: 판매된 입장권 수 (실제 관중 수)
   - Broadcasting rights: 방송 중계권 수익
   - Population: 연고지 시장 규모 (인구)
+- **REVENUE 데이터 출처(현 시점 계획)**:
+  - `1995~2001`: SABR `BRPanelupd.htm`의 `Table 28`
+  - `2016~2025`: Forbes `MLB Valuations` 리스트
+  - `2002~2015`: 현재 문서 기준 별도 소스 보강이 필요하며, 연속 패널 구축 시 추가 공개 자료 또는 보간 정책을 정의한다.
 
 구조 다이어그램은 `5.1 가치 평가 파이프라인`의 `Revenue Model` 블록을 기준으로 본다.
 
@@ -359,9 +365,12 @@ MRP는 선수가 팀 수익에 기여하는 한계 수익이다. 선수 추가/�
 
 FanGraphs의 `Win Curves and Player Pricing` 글은, 선수 가격 책정을 평가할 때 **선수가 추가하는 승수의 팀별 한계가치**와 **시장 전체의 승수 가격($/WAR 등)** 을 함께 봐야 한다는 점을 강조한다. 이는 우리 프로젝트에서 MRP를 단순히 "선수 실력의 절대 가치"로만 보지 않고, 팀 상황과 계약 의사결정 맥락까지 포함해 해석해야 함을 보완해 준다.
 
+Solow & Krautmann (2020)은 이 문제를 더 직접적으로 다룬다. 이 연구는 **계약 체결 시점(ex ante)** 기준으로 선수의 미래 생산성을 예측하고, 이를 **팀별 한계 승리 가치(team-specific value of a marginal win)** 와 결합해 **기대 한계수익의 현재가치**로 변환한 뒤, **보장 연봉의 현재가치**와 비교한다. 이는 본 프로젝트에서 `N년 계약의 적정 compensation PV`를 정의하는 방식과 매우 가깝다.
+
 - **Win Curve 관점**: 추가 1승의 가치는 선형적이지 않으며, 특히 플레이오프 경쟁권(예: 중상위 승수 구간)에 있는 팀에서 더 커질 수 있다.
 - **시장 가격 관점**: 어떤 선수가 특정 팀에 매우 큰 가치를 주더라도, 실제 계약 판단은 FA 시장의 대체 옵션과 평균적인 승수 가격을 함께 고려해야 한다.
 - **프로젝트 반영 방향**: 기본 모델은 Scully 기반 MRP/Net MRP를 유지하되, 향후 팀 상태(현재 예상 승수, 포스트시즌 경쟁 구간 여부)와 시장 가격 지표를 추가해 `상황 보정 가치` 또는 `의사결정 보조 지표`로 확장할 수 있다.
+- **현대적 계약 가치 해석**: 다년 계약 평가는 사후 성과가 아니라 `계약 시점에 기대 가능한 가치`를 기준으로 해야 하며, `할인된 미래 MRP(또는 기대 한계수익)`와 `할인된 미래 compensation`의 비교로 surplus를 해석하는 것이 적절하다.
 - **비고**: 이 참고 자료는 팀원 **이시윤** 제안으로 검토한 실무형 보조 자료다.
 
 ### 5.6. 데이터셋 구조
@@ -386,6 +395,8 @@ FanGraphs의 `Win Curves and Player Pricing` 글은, 선수 가격 책정을 평
 | tickets_sold | 판매된 입장권 수 | 수익 모델 독립변수 |
 | broadcasting_rights | 방송 중계권 수익 | 수익 모델 독립변수 |
 | population | 연고지 인구 | 수익 모델 독립변수 |
+
+`REVENUE`는 현재 기준으로 `SABR Table 28 (1995~2001)`과 `Forbes MLB Valuations (2016~2025)`를 결합해 구축하는 것을 기본안으로 둔다. 두 출처의 정의 차이는 ETL 단계에서 컬럼 정의 검증, 단위 통일, 필요 시 인플레이션 조정을 거쳐 정규화한다.
 
 #### 5.6.2. 선수 수준 데이터 (Player-level)
 
@@ -446,7 +457,7 @@ Team (team_id, year) ─┬─ 1:N ─ Player (player_id, team_id, year)
 
 - **선수 기록**: MLB 공식 기록, Baseball Savant, Baseball-Reference, MLB Stats API 등
 - **팀 기록**: MLB 팀별 시즌 스탯, 구단 공시
-- **수익·시장 데이터**: 구단 재무 관련 공개 자료, 티켓/관중 자료, 연고지 인구/시장 데이터
+- **수익·시장 데이터**: Forbes `MLB Valuations` 리스트(2016~2025), SABR `BRPanelupd.htm` Table 28(1995~2001), 티켓/관중 자료, 연고지 인구/시장 데이터
 
 ### 5.7. 구현 로드맵
 
@@ -692,13 +703,39 @@ PECOTA 같은 다년 예측을 직접 재현하는 것은 범위가 크므로, �
 - Scully, G. W. (1974). *Pay and Performance in Major League Baseball*. **The American Economic Review**, 64(6), 915-930.
   - 적용 영역: 5장 MRP 산정 구조, 팀 승률 함수와 팀 수익 함수로 분리한 2단계 가치평가 프레임
   - 반영 포인트: `개인 성적을 팀 성적 지표에 연결하는 방식`, `한계 수익 생산물(MRP) 추정 아이디어`, `구단 관점의 적정 가치 추정 문제 설정`
+- Forbes. *MLB Valuations*. https://www.forbes.com/mlb-valuations/list/
+  - 적용 영역: 5.4 팀 수익 모델, 5.6.1 팀 수준 데이터, 5.6.6 수익 데이터 소스
+  - 반영 포인트: `2016~2025 구단 revenue/valuation 공개 자료`, `현대 구간 팀 수익 데이터 소스`, `REVENUE 컬럼 구축 시 기준 출처`
+- SABR. *BRPanelupd.htm*, `Table 28`. http://roadsidephotos.sabr.org/baseball/BRPanelupd.htm
+  - 적용 영역: 5.4 팀 수익 모델, 5.6.1 팀 수준 데이터, 5.6.6 수익 데이터 소스
+  - 반영 포인트: `1995~2001 구간 팀 revenue 데이터 소스`, `Forbes 이전 시기 historical panel 보강`, `REVENUE 장기 시계열 구성의 초기 구간 확보`
+- Solow, J. L., & Krautmann, A. C. (2020). *Do You Get What You Pay for? Salary and Ex Ante Player Value in Major League Baseball*. **Journal of Sports Economics**, 21(7), 705-722. https://doi.org/10.1177/1527002520930259
+  - 적용 영역: 5.5 MRP 해석, 다년 계약 가치 산정, 5.1 DCF 기반 compensation PV 해석
+  - 반영 포인트: `계약 시점(ex ante) 기준 평가`, `팀별 한계 승리 가치의 현재가치화`, `할인된 미래 salary와 할인된 기대 가치 비교`, `장기 계약일수록 과지급 위험이 커질 수 있다는 해석 틀`
 - Sun, H.-C., Lin, T.-Y., Tsai, Y.-L. (2022). *Performance Prediction in Major League Baseball by Long Short-Term Memory Networks*. arXiv. https://doi.org/10.48550/arXiv.2206.09654
   - 적용 영역: 6.7 시계열 예측 모델 설계
   - 반영 포인트: `선수별 시즌 시계열의 sliding window 구성`, `LSTM 계열 베이스라인 설정`, `다음 시즌 예측 문제 정의`, `RMSE/MAE 기반 비교 평가`
 - Lee, W., Kim, J. H. (2025). *Pitcher Performance Prediction Major League Baseball (MLB) by Temporal Fusion Transformer*. **Computers, Materials & Continua**, 83(3), 5393-5412. https://doi.org/10.32604/cmc.2025.065413
   - 적용 영역: 6.7 TFT 기반 성능 예측 모델 설계
   - 반영 포인트: `Temporal Fusion Transformer(TFT) 적용`, `2~4시즌 길이 입력 시퀀스 비교`, `RMSE/MAE/MAPE 기반 성능 평가`, `설명 가능한 변수 중요도 분석`
+- Barnes, S. L., & Bjarnadóttir, M. V. (2016). *Great Expectations: An Analysis of Major League Baseball Free Agent Performance*. **Statistical Analysis and Data Mining: The ASA Data Science Journal**, 9(5), 295-309. https://doi.org/10.1002/sam.11311
+  - 적용 영역: 6.6 장기 예측 활용 관점, 6.7 유사 선수 및 FA 성과 해석 참고
+  - 반영 포인트: `자유계약선수 성과 기대치와 실제 성과 비교`, `계약 의사결정에서 장기 성과 전망의 중요성`, `시장 계약과 선수 퍼포먼스 간 간극 해석`
+  - 비고: 팀원 **조윤주** 조사 참고 자료
+- SABR. *The Sultan of Swag: Babe Ruth as a Financial Investment*. https://sabr.org/journal/article/the-sultan-of-swag-babe-ruth-as-a-financial-investment-4/
+  - 적용 영역: 참고 후보
+  - 반영 포인트: `선수 가치와 재무적 해석 관련 참고 가능 자료`
+  - 비고: 팀원 **이시윤** 조사 참고 자료
 - Cameron, D. (2012-01-25). *Win Curves and Player Pricing*. FanGraphs. https://blogs.fangraphs.com/win-curves-and-player-pricing/
   - 적용 영역: 5.5 MRP 해석과 계약 의사결정 보조 관점
   - 반영 포인트: `승수의 팀별 한계가치는 비선형적임`, `선수 가격 평가는 팀 내부 가치와 시장 가격을 함께 봐야 함`, `FA 계약의 효율성과 총가치를 분리해서 해석해야 함`
   - 비고: 팀원 **이시윤** 제안 참고 자료
+- Baseball Prospectus. *COT's Contracts*. https://legacy.baseballprospectus.com/compensation/cots/
+  - 적용 영역: 5.6.3 계약/보상 데이터, 6.2 데이터 파이프라인, 6.7.6 AAV 추정 모델
+  - 반영 포인트: `historical compensation 데이터 원천`, `Google Sheets 다운로드 후 적재하는 계약 데이터 소스`, `AAV/보상 모델의 감독학습 타깃 구성`, `salary 원천 데이터`
+  - 관련 시트: `계약/AAV 시트` https://docs.google.com/spreadsheets/d/1bXUPBabVf82y0m2KaZ0F9Fno9xwZ2pmepbFvMBX_TEM/ , `salary 시트` https://docs.google.com/spreadsheets/d/12XSXOQpjDJDCJKsA4xC1e_9FlS11aeioZy_p1nqpclg/
+  - 비고: 팀원 **이시윤** 조사 참고 자료
+- YouTube. *MLB FA valuation explainer video*. https://www.youtube.com/watch?v=tR-WFirYXh4
+  - 적용 영역: 4장 데이터 수집 방향 메모, 5.1 다년 계약 가치 문제 설정
+  - 반영 포인트: `FA 평가는 과거 성적 회고가 아니라 미래 퍼포먼스 추정이 핵심`, `시장 계약 금액과 구단 관점 적정 가치가 다를 수 있다는 문제의식`
+  - 비고: 팀원 **변준영** 조사 참고 자료
