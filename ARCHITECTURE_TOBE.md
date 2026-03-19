@@ -31,7 +31,7 @@ flowchart LR
     end
 
     subgraph heroku [HerokuRuntime]
-        Web["Django Web<br/>Gunicorn"]
+        Web["Web / Application Layer<br/>Django + Gunicorn"]
     end
 
     subgraph dataLayer [DataLayer]
@@ -45,11 +45,6 @@ flowchart LR
 
     subgraph ops [Ops]
         Monitor["Monitoring<br/>Logging"]
-    end
-
-    subgraph services [DomainServices]
-        ValuationSvc["Valuation<br/>Service"]
-        SettingsPage["Valuation<br/>Settings"]
     end
 
     subgraph offline [OfflinePipelines]
@@ -69,13 +64,7 @@ flowchart LR
     end
 
     User --> Web
-    Web --> SettingsPage
-    SettingsPage --> Postgres
-
-    Web --> ValuationSvc
-    ValuationSvc --> Postgres
-    ValuationSvc --> Artifacts
-
+    Web --> Postgres
     Web --> Inference
     Postgres --> Inference
     Artifacts --> Inference
@@ -104,9 +93,11 @@ flowchart LR
     PerfTrain --> Eval
     MarketTrain --> Eval
     Eval --> Artifacts
-
-    Web --> Postgres
 ```
+
+이 도식은 플랫폼을 **사용자 인터페이스**, **웹/애플리케이션 계층**, **온라인 추론**, **데이터 저장소**, **운영 모니터링**, **오프라인 학습 파이프라인**, **외부 데이터 소스**의 일곱 영역으로 구분해 보여준다. 사용자는 브라우저를 통해 서비스에 접속하고, Heroku 환경에서 실행되는 Django 기반 `Web / Application Layer`가 요청을 수신하는 진입점 역할을 한다. 이 계층은 선수 검색, 로스터 관리, 계약 정보 저장, 설정 관리, 상세 페이지 구성 같은 애플리케이션 로직을 처리하면서 필요한 데이터를 PostgreSQL에서 읽고 저장한다. 또한 선수 가치 계산이나 예측 결과 조회처럼 모델 실행이 필요한 요청은 `Online Inference` 계층으로 전달한다. 온라인 추론 계층은 DB에 저장된 선수 프로필, 시즌 기록, 계약 정보와 모델 아티팩트 저장소의 학습 완료 모델을 함께 참조하여 `predicted_value`, `predicted_aav` 같은 결과를 계산하고, 이를 다시 웹 계층으로 반환한다. 최종 결과는 상세 페이지나 시뮬레이션 화면에 표시되며, 필요하면 예측 캐시 형태로 DB에 저장될 수 있다. 웹 요청 처리와 추론 과정에서 발생하는 로그, 오류, 처리 상태는 `Monitoring / Logging` 계층으로 전달되어 운영 안정성을 관리한다.
+
+오프라인 영역은 실시간 사용자 요청과 분리된 배치형 학습 구조를 의미한다. 계약 시트, FanGraphs의 fWAR 데이터, IMF SDMX의 CPI 데이터는 먼저 `Import / Normalize` 단계에서 수집되고 형식을 맞춘 뒤 서비스 DB에 적재된다. 이후 `ETL / Feature Engineering` 단계에서 학습용 피처, CPI 보정값, 타깃 변수, 검증용 분할 데이터셋이 만들어진다. 이렇게 준비된 데이터는 `$ / WAR` 선형 모델, 비선형 모델, 성과 예측 모델, 시장가치 예측 모델 학습에 사용되며, 각 결과는 `Evaluate / Validate` 단계에서 성능과 일관성을 검증받는다. 최종 통과한 모델만 아티팩트 저장소에 반영되고, 온라인 추론 계층은 이를 재사용해 실제 서비스 응답을 만든다. 즉 이 구조의 핵심은 **데이터 수집과 모델 학습은 오프라인에서 수행하고, 검증된 결과만 온라인 서비스가 소비하도록 분리한 것**이다.
 
 ### 3.2. 데이터 모델
 
@@ -533,6 +524,13 @@ WAR 자체를 저장하더라도, 모델 입력 검증과 지표 재계산 가�
 | 심화 통계 | 단순 성적 나열이 아닌 고급 지표 계산 및 활용 |
 | 실시간 시뮬레이션 | 사용자가 스탯 임의 조정 시 예측 가치 실시간 계산 |
 | 시각화 | 성적 변화 추이, 유사 선수 비교, 예측 가치 |
+
+#### 6.1.1. 비기능적 요구사항
+
+- **데이터 정합성**: 외부 API, 계약 시트, 연봉 시트 등 서로 다른 출처의 데이터를 정규화된 스키마로 통합하여 관리할 수 있어야 한다.
+- **성능**: 선수 상세 조회는 평균 2초 이내에 응답해야 하며, 사용자가 주요 스탯을 조정하여 수행하는 시뮬레이션은 5초 이내에 결과가 반영되어야 한다. 또한 정상 사용 시 동시 사용자 20명, 최대 동시 사용자 30명 수준에서도 조회 및 시뮬레이션 요청을 안정적으로 처리할 수 있어야 한다.
+- **안정성**: 데이터 업로드, 외부 API 호출, 예측 결과 제공 과정에서 오류가 발생하더라도 캐시 데이터나 기본값을 활용하는 fallback 로직을 통해 핵심 기능을 지속적으로 제공할 수 있어야 한다.
+- **유지보수성**: 데이터 수집, 전처리, 예측, 시각화 기능은 모듈별로 분리되어야 하며, 모델 교체나 기능 확장이 기존 시스템에 미치는 영향을 최소화할 수 있어야 한다.
 
 ### 6.2. 데이터 파이프라인
 
