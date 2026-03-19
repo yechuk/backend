@@ -16,7 +16,7 @@
 
 ## 2. 서비스 배경
 
-본 단계의 모델 목표는 **FA 선수의 시장 계약가치와 경기장 내 성과가치를 함께 추정하는 것**이다.
+본 단계의 모델 목표는 **FA 선수의 시장 계약가치와 성과기반 예측가치를 함께 추정하는 것**이다.
 
 이를 위해 시장에서 실제로 형성되는 계약가격(`predicted_aav`)과, 선수의 미래 WAR 기반 내재가치(`predicted_value`)를 분리해 추정한다. 두 값의 차이는 단순 예측값이 아니라, 영입/재계약/방출 판단에 쓰이는 의사결정 보조 지표로 해석한다.
 
@@ -31,7 +31,7 @@ flowchart LR
     end
 
     subgraph heroku [HerokuRuntime]
-        Web["Web / Application Layer<br/>Django + Gunicorn"]
+        Web@{ img: "https://cdn.simpleicons.org/django/092E20", label: "Web / Application Layer (Django + Gunicorn)", pos: "b", w: 60, constraint: "on" }
     end
 
     subgraph dataLayer [DataLayer]
@@ -50,8 +50,8 @@ flowchart LR
     subgraph offline [OfflinePipelines]
         Import["Import<br/>Normalize"]
         ETL["ETL<br/>Feature Eng."]
-        LinearFit["Linear model<br/>($/WAR)"]
-        NonLinearFit["Non-linear model<br/>($/WAR, optional)"]
+        LinearFit@{ img: "./assets/linear-model-icon.svg", label: "Linear model ($/WAR)", pos: "b", w: 60, constraint: "on" }
+        NonLinearFit@{ img: "./assets/non-linear-model-icon.svg", label: "Non-linear model ($/WAR, optional)", pos: "b", w: 60, constraint: "on" }
         PerfTrain["Perf model<br/>(WAR)"]
         MarketTrain["Market model<br/>(AAV)"]
         Eval["Evaluate<br/>Validate"]
@@ -60,7 +60,7 @@ flowchart LR
     subgraph external [ExternalSources]
         ContractSrc["Contracts<br/>(Sheets)"]
         FGSrc["FanGraphs<br/>fWAR"]
-        CPISrc["IMF SDMX<br/>CPI"]
+        CPISrc["IMF SDMX<br/>U.S. CPI"]
     end
 
     User --> Web
@@ -97,7 +97,7 @@ flowchart LR
 
 이 도식은 플랫폼을 **사용자 인터페이스**, **웹/애플리케이션 계층**, **온라인 추론**, **데이터 저장소**, **운영 모니터링**, **오프라인 학습 파이프라인**, **외부 데이터 소스**의 일곱 영역으로 구분해 보여준다. 사용자는 브라우저를 통해 서비스에 접속하고, Heroku 환경에서 실행되는 Django 기반 `Web / Application Layer`가 요청을 수신하는 진입점 역할을 한다. 이 계층은 선수 검색, 로스터 관리, 계약 정보 저장, 설정 관리, 상세 페이지 구성 같은 애플리케이션 로직을 처리하면서 필요한 데이터를 PostgreSQL에서 읽고 저장한다. 또한 선수 가치 계산이나 예측 결과 조회처럼 모델 실행이 필요한 요청은 `Online Inference` 계층으로 전달한다. 온라인 추론 계층은 DB에 저장된 선수 프로필, 시즌 기록, 계약 정보와 모델 아티팩트 저장소의 학습 완료 모델을 함께 참조하여 `predicted_value`, `predicted_aav` 같은 결과를 계산하고, 이를 다시 웹 계층으로 반환한다. 최종 결과는 상세 페이지나 시뮬레이션 화면에 표시되며, 필요하면 예측 캐시 형태로 DB에 저장될 수 있다. 웹 요청 처리와 추론 과정에서 발생하는 로그, 오류, 처리 상태는 `Monitoring / Logging` 계층으로 전달되어 운영 안정성을 관리한다.
 
-오프라인 영역은 실시간 사용자 요청과 분리된 배치형 학습 구조를 의미한다. 계약 시트, FanGraphs의 fWAR 데이터, IMF SDMX의 CPI 데이터는 먼저 `Import / Normalize` 단계에서 수집되고 형식을 맞춘 뒤 서비스 DB에 적재된다. 이후 `ETL / Feature Engineering` 단계에서 학습용 피처, CPI 보정값, 타깃 변수, 검증용 분할 데이터셋이 만들어진다. 이렇게 준비된 데이터는 `$ / WAR` 선형 모델, 비선형 모델, 성과 예측 모델, 시장가치 예측 모델 학습에 사용되며, 각 결과는 `Evaluate / Validate` 단계에서 성능과 일관성을 검증받는다. 최종 통과한 모델만 아티팩트 저장소에 반영되고, 온라인 추론 계층은 이를 재사용해 실제 서비스 응답을 만든다. 즉 이 구조의 핵심은 **데이터 수집과 모델 학습은 오프라인에서 수행하고, 검증된 결과만 온라인 서비스가 소비하도록 분리한 것**이다.
+오프라인 영역은 실시간 사용자 요청과 분리된 배치형 학습 구조를 의미한다. 계약 시트, FanGraphs의 fWAR 데이터, IMF SDMX의 **미국 CPI** 데이터는 먼저 `Import / Normalize` 단계에서 수집되고 형식을 맞춘 뒤 서비스 DB에 적재된다. 이후 `ETL / Feature Engineering` 단계에서 학습용 피처, CPI 보정값, 타깃 변수, 검증용 분할 데이터셋이 만들어진다. 이렇게 준비된 데이터는 `$ / WAR` 선형 모델, 비선형 모델, 성과 예측 모델, 시장가치 예측 모델 학습에 사용되며, 각 결과는 `Evaluate / Validate` 단계에서 성능과 일관성을 검증받는다. 최종 통과한 모델만 아티팩트 저장소에 반영되고, 온라인 추론 계층은 이를 재사용해 실제 서비스 응답을 만든다.
 
 ### 3.2. 데이터 모델
 
@@ -189,11 +189,13 @@ sequenceDiagram
 
 ## 4. 데이터 흐름
 
-1. **순자산** — `Contract` 모델은 `total_value`, `guaranteed_ratio`, `years`를 저장한다. `roster/services.py`의 `calculate_net_worth()` 함수가 `net_worth = total_value * guaranteed_ratio * years`로 계산한다. 이 값은 목록 및 상세 화면에 표시되며, 계약(비율, 연수) 수정을 통해 갱신할 수 있다.
+1. **원천 데이터 수집 및 적재** — `COT's Contracts` 기반 계약 데이터, FanGraphs의 fWAR 및 관련 성적 지표, IMF SDMX API에서 수집한 미국 CPI 시계열을 각각 정규화한 뒤 서비스 DB에 적재한다. 이 단계에서는 원본 값을 보존하면서 계약 데이터, 선수 시즌 데이터, CPI 시계열이 이후 오프라인 학습과 온라인 조회의 공통 기반이 되도록 저장 구조를 맞춘다.
 
-2. **인플레이션 보정(CPI)** — 서로 다른 시점의 계약 AAV를 동일 기준시점으로 비교하기 위해 CPI 기반 보정을 수행한다. CPI 시계열은 **IMF SDMX API**에서 수집해 서비스 DB에 캐시하고, 오프라인 `ETL` 단계에서 `real_aav = nominal_aav x CPI(기준시점) / CPI(계약시점)` 규칙으로 실질 AAV를 산출한다. 원시 계약값(`nominal_aav`)은 보존하고, 비교/학습용 표준값(`real_aav`)을 별도로 관리한다.
+2. **인플레이션 보정(CPI)** — 서로 다른 시점의 계약 AAV를 동일 기준시점으로 비교하기 위해 CPI 기반 보정을 수행한다. 오프라인 `ETL` 단계에서 `real_aav = nominal_aav x CPI(기준시점) / CPI(계약시점)` 규칙으로 실질 AAV를 산출하며, 원시 계약값(`nominal_aav`)은 보존하고 비교/학습용 표준값(`real_aav`)을 별도로 관리한다.
 
-3. **훈련 데이터셋 구성(ETL)** — 모델 학습 시에는 서비스 DB에 적재된 원천/정규화 데이터를 그대로 바로 사용하기보다, 오프라인 `ETL + 검증` 단계를 거쳐 결측 처리, 스키마 정합성 검증, 시즌 정렬, CPI 기준시점 보정, 타깃 생성, 학습/평가 분할이 반영된 훈련 데이터셋으로 별도 구성한다.
+3. **훈련 데이터셋 구성(ETL)** — 모델 학습 시에는 서비스 DB에 적재된 원천/정규화 데이터를 그대로 바로 사용하기보다, 오프라인 `ETL + 검증` 단계를 거쳐 결측 처리, 스키마 정합성 검증, 시즌 정렬, CPI 기준시점 보정, 타깃 생성, 학습/평가 분할이 반영된 훈련 데이터셋으로 별도 구성한다. 이때 시장 모델은 모든 계약 레코드를 그대로 쓰지 않고, **선수가 새로운 계약을 체결한 시점의 레코드만** 학습 샘플로 필터링해 사용한다.
+
+4. **모델 학습 결과의 서비스 연결** — 성과 모델과 시장 모델은 오프라인에서 학습·검증을 거친 뒤 아티팩트로 저장되고, 온라인 추론 계층은 이를 사용해 상세 페이지 요청 시 `predicted_war`, `predicted_value`, `predicted_aav`를 계산한다. 최종적으로 선수 상세 페이지에서는 성과 모델 결과와 시장 모델 결과를 함께 보여 주어 성과 전망과 시장 평가를 동시에 해석할 수 있도록 한다.
 
 ### 참고: 외부 영상 메모
 
@@ -205,7 +207,7 @@ sequenceDiagram
 
 ## 5. 선수 예측 및 가치 판단 설계
 
-본 프로젝트는 선수 가치 판단을 위해 **성과 모델(Performance Model)** 과 **시장 모델(Market Model)** 을 분리한다. 성과 모델은 선수의 미래 WAR와 핵심 성적 지표를 예측해 `predicted_value`를 만들고, 시장 모델은 성과 예측값과 시장 환경을 함께 사용해 `predicted_aav`를 산출한다. 서비스에서는 두 값을 함께 보여 주며, `시장가치 - 성과가치` 차이를 계약 판단 보조 지표로 해석한다. 현 단계의 1차 구현에서는 두 모델 모두에 대해 `선형모델(Linear/Ridge/Lasso)`과 `Gradient Boosting Tree(XGBoost/LightGBM)`를 공통 후보군으로 두고 비교 평가한다.
+본 프로젝트는 선수 가치 판단을 위해 **성과 모델(Performance Model)** 과 **시장 모델(Market Model)** 을 분리한다. 성과 모델은 선수의 미래 WAR와 핵심 성적 지표를 예측해 `predicted_value`를 만들고, 시장 모델은 성과 예측값과 시장 환경을 함께 사용해 `predicted_aav`를 산출한다. 서비스에서는 두 값을 함께 보여 주며, `시장가치 - 성과기반 예측가치` 차이를 계약 판단 보조 지표로 해석한다. 현 단계의 1차 구현에서는 두 모델 모두에 대해 `선형모델(Linear/Ridge/Lasso)`과 `Gradient Boosting Tree(XGBoost/LightGBM)`를 공통 후보군으로 두고 비교 평가한다.
 
 ### 5.1. 예측 파이프라인
 
@@ -215,7 +217,7 @@ flowchart LR
         subgraph train_sources [학습 데이터 소스]
             FGSrc[FanGraphs fWAR 지표]
             ContractSrc["Google Sheets<br/>COT's Contracts"]
-            CPISrc["IMF SDMX API<br/>CPI 시계열"]
+            CPISrc["IMF SDMX API<br/>U.S. CPI 시계열"]
         end
         Standardize["계약 AAV 시점 표준화<br/>(계약 데이터 + CPI)"]
         FGSrc --> DB
@@ -244,7 +246,7 @@ flowchart LR
     end
 ```
 
-`6.4.2`와 `6.7`에서 정의한 모델은 **오프라인 학습 단계**와 **온라인 추론 단계**를 구분한다. Google Sheets에서 업로드한 `COT's Contracts` 기반 계약 데이터는 우선 서비스 DB에 정규화 저장되고, IMF SDMX API에서 수집한 CPI 시계열도 함께 적재된다. 이후 오프라인 `ETL`을 통해 계약 시점별 명목 AAV를 기준시점 실질 AAV로 환산하고, 이를 바탕으로 **시장 모델 학습용 타깃(`새 계약 real_aav`)**, **성과 모델 학습용 시즌 데이터셋**, **포지션별 WAR 환산 계수 테이블**로 재구성된다. 실제 상세 페이지 조회 시에는 서비스 DB의 선수 시즌 기록으로부터 성과 모델용 피처와 시장 모델용 피처를 각각 생성하고, 성과 모델과 시장 모델을 **함께 실행**한다. 성과 모델은 `다음 시즌 WAR`와 주요 성적 전망을 산출하고 이를 포지션별 환산 계수에 연결해 `predicted_value`를 만들며, 시장 모델은 별도의 시장/연봉/계약 환경 피처를 바탕으로 `predicted_aav`와 계약 범위를 산출한다. 최종 계약 의사결정 단계는 이 두 결과를 같이 비교해 사용한다.
+`6.4.2`와 `6.7`에서 정의한 모델은 **오프라인 학습 단계**와 **온라인 추론 단계**를 구분한다. Google Sheets에서 업로드한 `COT's Contracts` 기반 계약 데이터는 우선 서비스 DB에 정규화 저장되고, IMF SDMX API에서 수집한 **미국 CPI 시계열**도 함께 적재된다. 이후 오프라인 `ETL`을 통해 계약 시점별 명목 AAV를 기준시점 실질 AAV로 환산하고, 이를 바탕으로 **시장 모델 학습용 타깃(`새 계약 real_aav`)**, **성과 모델 학습용 시즌 데이터셋**, **포지션별 WAR 환산 계수 테이블**로 재구성된다. 실제 상세 페이지 조회 시에는 서비스 DB의 선수 시즌 기록으로부터 성과 모델용 피처와 시장 모델용 피처를 각각 생성하고, 성과 모델과 시장 모델을 **함께 실행**한다. 성과 모델은 `다음 시즌 WAR`와 주요 성적 전망을 산출하고 이를 포지션별 환산 계수에 연결해 `predicted_value`를 만들며, 시장 모델은 별도의 시장/계약 환경 피처를 바탕으로 `predicted_aav`를 산출한다. 최종 계약 의사결정 단계는 이 두 결과를 같이 비교해 사용한다.
 
 ### 5.1.1. 모델별 IV / DV 요약
 
@@ -271,7 +273,7 @@ flowchart LR
 
 - **DV**: `Inflation-adjusted Average Yearly Salary for the New Contract`
 - **Training Data Scope**: `new-contract signing point`에 해당하는 player-season만 포함한다. 즉, 선수가 실제로 새로운 계약을 맺는 시점의 관측치만 시장 모델 학습 샘플로 사용한다.
-- **Target Normalization**: 원시 계약값(`nominal_aav`)은 보존하되, 서로 다른 연도 계약을 동일 구매력 기준으로 비교하기 위해 **IMF SDMX API 기반 CPI**를 사용해 `real_aav`를 산출하고 이를 시장 모델의 기본 타깃으로 사용한다.
+- **Target Normalization**: 원시 계약값(`nominal_aav`)은 보존하되, 서로 다른 연도 계약을 동일 구매력 기준으로 비교하기 위해 **IMF SDMX API 기반 미국 CPI**를 사용해 `real_aav`를 산출하고 이를 시장 모델의 기본 타깃으로 사용한다.
 
 | IV Group | Variable | Description |
 |------|------|------|
@@ -295,10 +297,9 @@ flowchart LR
 
 - **시즌별 선수 기록**: 타자/투수 기본 기록과 지표
 - **선수 메타데이터**: 포지션, 나이, 경력 연차, handedness, 소속 팀
-- **계약 정보**: 연봉, 계약 총액, 보장 비율, 계약 연수
-- **시장 계약 정보**: 사용자가 Google Sheets에서 내려받은 과거 FA 계약 데이터, 포지션별 연봉 분포, 리그 연봉 상승률
-- **급여 정보**: 사용자가 Google Sheets에서 내려받은 salary 데이터
-- **물가 지표 데이터**: IMF SDMX API에서 수집한 CPI 시계열과 기준시점 보정 계수
+- **계약 정보**: AAV, 계약 총액, 보장 비율, 계약 연수
+- **시장 계약 정보**: 사용자가 Google Sheets에서 내려받은 과거 FA 계약 데이터, 포지션별 AAV 분포, 리그 계약가치 상승률
+- **물가 지표 데이터**: IMF SDMX API에서 수집한 미국 CPI 시계열과 기준시점 보정 계수
 - **팀/리그 맥락 정보**: 리그 평균 대비 보정치, 시즌 길이, 출전 규모, 필요 시 부상/결장 대리 변수
 - **성과 가치 환산 기준**: FA 계약 데이터에서 역산한 포지션별 `$ / WAR` 환산 계수, 필요 시 승수 한계가치 보정치
 
@@ -306,8 +307,8 @@ flowchart LR
 
 - **타자**: AVG, OBP, SLG, OPS, HR, RBI, WAR, wOBA, wRC+, BABIP
 - **투수**: ERA, FIP, xFIP, WHIP, SO, BB, K/9, BB/9, IP, WAR
-- **성과 출력**: 다음 시즌 WAR, t+1 ~ t+n 시즌 포인트 예측, 필요 시 P10/P50/P90 같은 구간 예측
-- **가치 출력**: `predicted_value`(WAR 기반 내재가치), `predicted_aav`(시장 예상 계약가), 추천 계약 기간, 계약 범위 밴드
+- **성과 출력**: 다음 시즌 WAR, t+1 ~ t+n 시즌 포인트 예측
+- **가치 출력**: `predicted_value`(WAR 기반 내재가치), `predicted_aav`(시장 예상 계약가), 추천 계약 기간
 
 ### 5.4. 서비스 활용 방식
 
@@ -322,14 +323,14 @@ flowchart LR
 - 단일 시즌 성과보다 다년 전망을 우선해 선수의 안정성과 변동성을 함께 본다.
 - 계약 의사결정은 예측 성과, 유사 선수 분포, 현재 계약 조건, 예상 AAV를 함께 고려한다.
 
-### 5.5.1. WAR 기반 성과가치 환산 절차
+### 5.5.1. WAR 기반 성과기반 예측가치 환산 절차
 
 성과 모델에서 예측된 WAR이 화폐 가치(`predicted_value`)로 이어지는 과정은 다음 순서를 따른다.
 
 1. **미래 WAR 예측**: 성과 모델이 선수의 과거 시즌 데이터를 바탕으로 `다음 시즌 WAR`를 예측한다. 기본 운영에서는 이 값을 새 계약 구간의 대표적인 연간 성과 기대치로 해석한다.
-2. **포지션 식별**: 선수의 주 포지션을 기준으로 포지션별 환산 테이블에서 해당 계수를 찾는다. 타자와 투수는 분리하고, 필요 시 CL, SP, UT 같은 역할군을 별도로 둔다.
-3. **포지션별 변환 계수 적용**: 예측 WAR에 해당 포지션의 `$ / WAR` 계수를 곱해 1차 성과가치를 계산한다. 이는 동일한 1 WAR이라도 포지션 희소성과 시장 수요에 따라 경제적 가치가 다를 수 있음을 반영한다.
-4. **최종 성과가치 산출**: 환산 결과를 `predicted_value`로 저장하고, 이후 시장 모델의 `predicted_aav` 및 실제 계약 조건과 비교한다.
+2. **포지션 식별**: 선수의 주 포지션을 기준으로 포지션별 환산 테이블에서 해당 계수를 찾는다.
+3. **포지션별 변환 계수 적용**: 예측 WAR에 해당 포지션의 `$ / WAR` 계수를 곱해 1차 성과기반 예측가치를 계산한다. 이는 동일한 1 WAR이라도 포지션 희소성과 시장 수요에 따라 경제적 가치가 다를 수 있음을 반영한다.
+4. **최종 성과기반 예측가치 산출**: 환산 결과를 `predicted_value`로 저장하고, 이후 시장 모델의 `predicted_aav` 및 실제 계약 조건과 비교한다.
 
 연구 참고 사례에서는 투수 중 `CL`, 타자 중 `UT`가 상대적으로 높은 WAR당 달러 가치를 보였으므로, 문서와 구현 모두 포지션 세분화 가능성을 열어 둔다.
 
@@ -363,7 +364,7 @@ WAR 자체를 저장하더라도, 모델 입력 검증과 지표 재계산 가�
 | handedness | 좌/우/스위치 | 유형 구분 |
 | experience | 경력 연차 | 성장/회귀 구간 해석 |
 
-#### 5.6.3. 계약/보상 데이터 (Contract-level)
+#### 5.6.3. 계약 데이터 (Contract-level)
 
 시장 모델의 학습 데이터는 모든 시즌 계약 레코드를 그대로 쓰지 않고, **선수가 새로운 계약을 체결한 시점의 레코드만** 추출해 구성한다. 따라서 이 테이블은 원천 저장 계층이며, 실제 시장 모델 학습용 데이터셋은 여기서 `new contract signing point` 조건으로 한 번 더 필터링된다.
 
@@ -371,19 +372,17 @@ WAR 자체를 저장하더라도, 모델 입력 검증과 지표 재계산 가�
 |------|------|------|
 | player_id | 선수 ID | 식별 |
 | year | 시즌 연도 | 시계열 |
-| compensation | 보상(연봉+계약금+보너스+alpha) | 시장 모델의 보조 타깃, 계약 구조 비교 |
-| salary | 시즌 연봉 | 연봉 이력 추적, 시장 모델의 핵심 입력 |
 | aav | 연평균계약가치 (명목 AAV, Average Annual Value) | 원본 계약 값 보존 |
-| real_aav | CPI 기준시점으로 보정한 실질 AAV | 시장 모델의 기본 타깃 |
+| real_aav | 미국 CPI 기준시점으로 보정한 실질 AAV | 시장 모델의 기본 타깃 |
 | total_value | 계약 총액 | 계약 구조 파악 |
 | guaranteed_ratio | 보장 비율 | 리스크 분석 |
 | years | 계약 연수 | 다년 의사결정 참고 |
 | cpi_period | CPI 매핑 기준 시점(예: 계약 연도/월) | 보정 재현성 확보 |
 | cpi_base_period | 실질 AAV 환산 기준 시점 | 비교 기준 고정 |
 
-`real_aav`는 IMF SDMX API에서 수집한 CPI를 사용해 계산한다. 원칙적으로 계약 체결 시점과 가장 가까운 CPI 관측치를 사용하고, 기준시점은 모델 학습/운영 배치에서 전역 설정으로 고정한다.
+`real_aav`는 IMF SDMX API에서 수집한 미국 CPI를 사용해 계산한다. 원칙적으로 계약 체결 시점과 가장 가까운 CPI 관측치를 사용하고, 기준시점은 모델 학습/운영 배치에서 전역 설정으로 고정한다.
 
-#### 5.6.3.A. 성과가치 환산 테이블 (Value Conversion-level)
+#### 5.6.3.A. 성과기반 예측가치 환산 테이블 (Value Conversion-level)
 
 | 변수 | 설명 | 용도 |
 |------|------|------|
@@ -438,11 +437,10 @@ WAR 자체를 저장하더라도, 모델 입력 검증과 지표 재계산 가�
 - **선수 기록**: MLB 공식 기록, Baseball Savant, Baseball-Reference 등
 - **WAR 관련 데이터**: FanGraphs의 WAR/fWAR 및 관련 지표 데이터
 - **팀/리그 맥락 정보**: MLB 팀별 시즌 스탯, 리그 평균 지표, 공개 데이터셋
-- **계약 정보**: Baseball Prospectus의 [`COT's Contracts`](https://legacy.baseballprospectus.com/compensation/cots/)를 기반으로 사용자가 Google Sheets에서 다운로드한 계약 데이터 ([sheet link](https://docs.google.com/spreadsheets/d/1bXUPBabVf82y0m2KaZ0F9Fno9xwZ2pmepbFvMBX_TEM/)), 구단 공시, 공개 연봉 데이터, 프로젝트 입력 데이터
-- **급여 정보**: 사용자가 Google Sheets에서 다운로드한 salary 데이터 ([sheet link](https://docs.google.com/spreadsheets/d/12XSXOQpjDJDCJKsA4xC1e_9FlS11aeioZy_p1nqpclg/))
-- **시장 비교 데이터**: FA 계약 사례, 포지션별 AAV 분포, 시즌별 연봉 인플레이션 지표
-- **물가 데이터**: IMF SDMX API에서 수집한 CPI 시계열
-- **성과가치 환산 데이터**: FA 계약 데이터에서 추정한 포지션별 `$ / WAR` 계수 테이블
+- **계약 정보**: Baseball Prospectus의 [`COT's Contracts`](https://legacy.baseballprospectus.com/compensation/cots/)를 기반으로 사용자가 Google Sheets에서 다운로드한 계약 데이터 ([sheet link](https://docs.google.com/spreadsheets/d/1bXUPBabVf82y0m2KaZ0F9Fno9xwZ2pmepbFvMBX_TEM/)), 구단 공시, 프로젝트 입력 데이터
+- **시장 비교 데이터**: FA 계약 사례, 포지션별 AAV 분포, 시즌별 계약가치 인플레이션 지표
+- **물가 데이터**: IMF SDMX API에서 수집한 미국 CPI 시계열
+- **성과기반 예측가치 환산 데이터**: FA 계약 데이터에서 추정한 포지션별 `$ / WAR` 계수 테이블
 
 ### 5.7. 구현 로드맵
 
@@ -534,8 +532,8 @@ WAR 자체를 저장하더라도, 모델 입력 검증과 지표 재계산 가�
 
 ### 6.2. 데이터 파이프라인
 
-- **데이터 소스**: `/data` 디렉터리에 업로드되는 파일 (CSV/JSON/XLSX 등) + Lahman Database 파생 파일 + FanGraphs의 WAR/fWAR 및 관련 지표 데이터 + 사용자가 Google Sheets에서 다운로드한 `COT's Contracts` 계약 데이터 + salary 데이터 + IMF SDMX API의 CPI 응답
-- **수집 방식**: (1) 파일 기반 배치 임포트, (2) FanGraphs의 WAR/fWAR 및 관련 지표는 별도 정규화 적재 파이프라인으로 서비스 DB에 저장, (3) 계약/AAV 데이터는 사용자가 Google Sheets에서 다운로드한 `COT's Contracts` 스프레드시트를 업로드하고 이를 정규화해 서비스 DB에 적재, (4) salary 데이터도 별도 Google Sheets 스프레드시트를 업로드해 정규화 적재, (5) CPI 시계열은 IMF SDMX API에서 주기적으로 동기화해 서비스 DB에 캐시, (6) 이후 오프라인 `ETL + 검증` 단계에서 명목 AAV를 기준시점 실질 AAV로 변환한 뒤 훈련 데이터셋과 시장 기준 데이터셋을 생성
+- **데이터 소스**: `/data` 디렉터리에 업로드되는 파일 (CSV/JSON/XLSX 등) + Lahman Database 파생 파일 + FanGraphs의 WAR/fWAR 및 관련 지표 데이터 + 사용자가 Google Sheets에서 다운로드한 `COT's Contracts` 계약 데이터 + IMF SDMX API의 미국 CPI 응답
+- **수집 방식**: (1) 파일 기반 배치 임포트, (2) FanGraphs의 WAR/fWAR 및 관련 지표는 별도 정규화 적재 파이프라인으로 서비스 DB에 저장, (3) 계약/AAV 데이터는 사용자가 Google Sheets에서 다운로드한 `COT's Contracts` 스프레드시트를 업로드하고 이를 정규화해 서비스 DB에 적재, (4) 미국 CPI 시계열은 IMF SDMX API에서 주기적으로 동기화해 서비스 DB에 캐시, (5) 이후 오프라인 `ETL + 검증` 단계에서 명목 AAV를 기준시점 실질 AAV로 변환한 뒤 훈련 데이터셋과 시장 기준 데이터셋을 생성
 - **구현**: `scripts/import_data.py` — Python 스크립트로 `/data` → 서비스 DB 적재. 훈련 데이터셋 생성은 별도 오프라인 ETL 작업으로 분리한다.
 - **모델 학습 연계**: 서비스 DB에 적재된 원천/정규화 데이터를 기준으로 오프라인 학습 파이프라인이 CPI 기준시점 보정까지 수행한 뒤 훈련 데이터셋과 계약 시장 기준 데이터셋을 생성하며, 세부 기준은 5.7과 6.7.1을 따른다.
 
@@ -650,14 +648,14 @@ $$
 
 - **시즌별 성적 테이블**: 기본 지표 + 추가 지표 (타자: fWAR, wOBA, wRC+, BABIP, OPS+ / 투수: fWAR, FIP, xFIP, K/9, BB/9)
 - **성적 추이 차트**: 타자(AVG, OPS, HR, fWAR, wRC+) / 투수(ERA, FIP, fWAR)
-- **미래 성적 예측 카드**: AVG, HR, OPS, fWAR, wOBA, wRC+ (타자) / ERA, FIP (투수)
-- **계약 가치 카드**: `predicted_value`, `predicted_aav`, 추천 계약 기간, 현재 계약 대비 차이, 가치 갭
+- **성과 모델 카드**: AVG, HR, OPS, fWAR, wOBA, wRC+ (타자) / ERA, FIP (투수), `predicted_war`, `predicted_value`
+- **시장 모델 카드**: `predicted_aav`, 추천 계약 기간, 현재 계약 대비 차이, 가치 갭
 
-선수 상세 페이지에서는 해당 선수의 **N년치 장기 실적 지표 전망**과 **성과가치 vs 시장가치 비교**를 함께 보여줄 필요가 있다. 이를 위해 성과 모델과 시장 모델을 분리 운영한다. 성과 모델은 최근 스포츠 시계열 예측 연구의 방향을 반영해, 단일 지표 회귀보다 **멀티변수 시즌 시계열 기반 예측**을 기본 원칙으로 잡는다.
+선수 상세 페이지에서는 해당 선수의 **N년치 장기 실적 지표 전망**과 **성과기반 예측가치 vs 시장가치 비교**를 함께 보여줄 필요가 있다. 이를 위해 상세 페이지에서 **성과 모델 결과와 시장 모델 결과를 모두 노출**하고, 두 모델을 분리 운영한다. 성과 모델은 최근 스포츠 시계열 예측 연구의 방향을 반영해, 단일 지표 회귀보다 **멀티변수 시즌 시계열 기반 예측**을 기본 원칙으로 잡는다.
 
-- **역할**: 성과 모델은 선수별로 t+1, t+2, … t+N 시즌에 대한 주요 성적 지표와 다음 시즌 WAR를 전망하고, 시장 모델은 이 결과를 입력받아 예상 AAV를 산출한다.
-- **입력**: 과거 시즌별 성적(MLBPlayerSeason), 선수 속성(포지션, 나이, 경력 연차, handedness 등), 팀·리그 보정 요인. 시장 모델에는 추가로 현재 연봉, 과거 계약, 팀 페이롤/시장 규모, 재계약 여부 같은 계약 환경 피처를 넣는다.
-- **출력**: N년치 연도별 포인트 예측(및 향후 분포 예측 P10/P50/P90 등), `predicted_value`, `predicted_aav`, 추천 계약 범위. 이 출력은 상세 페이지의 “미래 성적 예측”·“장기 전망”·“계약 가치” 영역에 바인딩된다.
+- **역할**: 성과 모델은 선수별로 t+1, t+2, … t+N 시즌에 대한 주요 성적 지표와 다음 시즌 WAR를 전망하고, 시장 모델은 이 결과를 입력받아 예상 AAV를 산출한다. 상세 페이지에서는 두 모델의 결과를 나란히 보여 주어 성과 전망과 시장 평가를 함께 해석한다.
+- **입력**: 과거 시즌별 성적(MLBPlayerSeason), 선수 속성(포지션, 나이, 경력 연차, handedness 등), 팀·리그 보정 요인. 시장 모델에는 추가로 현재 계약 조건, 과거 계약, 팀 페이롤/시장 규모, 재계약 여부 같은 계약 환경 피처를 넣는다.
+- **출력**: N년치 연도별 포인트 예측, `predicted_value`, `predicted_aav`, 추천 계약 기간. 이 출력은 상세 페이지의 “성과 모델 카드”·“시장 모델 카드”·“장기 전망” 영역에 바인딩된다.
 - **가치 표시 원칙**: `predicted_value`는 `예측 WAR x 포지션별 $/WAR 계수`로 계산되며, 가능하면 적용된 포지션군과 환산 계수를 함께 노출한다.
 - **기본 설계 원칙**:
   - 시즌별 입력을 `2~4년 길이의 sliding window`로 구성해 다음 시즌(t+1) 또는 다년(t+1~t+N) 지표를 예측한다.
@@ -703,7 +701,7 @@ FanGraphs의 `Win Curves and Player Pricing` 글은, 선수 가격 책정을 평
 PECOTA 같은 다년 예측을 직접 재현하는 것은 범위가 크므로, 다음과 같은 단계적 접근을 고려한다.
 
 - **Step A — 포인트 예측 확장**: t+1만이 아니라 t+2~t+5까지의 주요 지표를 예측(선수 노화/회귀 포함)
-- **Step B — 분포 예측**: 한 값이 아니라 구간/분포(예: P10/P50/P90)로 성과를 산출
+- **Step B — 다년 예측 확장**: 한 시즌 예측을 넘어 t+2 ~ t+5까지의 성과 전망을 함께 산출
 - **Step C — 팀 매니징 통합**: 다년 성과 분포와 계약(AAV/연봉/옵션)을 결합해 기대치와 리스크를 표시
 
 ### 6.7. 선수 미래 실적 예측 모델
@@ -746,7 +744,7 @@ PECOTA 같은 다년 예측을 직접 재현하는 것은 범위가 크므로, �
   - 시퀀스 길이 `2, 3, 4시즌`을 비교한다.
   - 지표별 `R²`, `MAPE`, `RMSE`를 기본 평가 지표로 사용한다.
   - 단순 직전 시즌 유지, 평균 회귀, LSTM 계열을 함께 비교해 TFT 채택 여부를 결정한다.
-- **출력**: 선수별 t+1, t+2, … 에 대한 실적 지표(및 필요 시 불확실성 구간)
+- **출력**: 선수별 t+1, t+2, … 에 대한 실적 지표
 
 #### 6.7.4. 1차 운영 후보 — 선형모델 및 GBT
 
@@ -769,7 +767,7 @@ PECOTA 같은 다년 예측을 직접 재현하는 것은 범위가 크므로, �
 
 #### 6.7.6. 가치 추정 이중 모델
 
-- **목표**: 선수의 `경기장 내 성과가치(predicted_value)`와 `시장 계약가치(predicted_aav)`를 분리 추정한다.
+- **목표**: 선수의 `성과기반 예측가치(predicted_value)`와 `시장 계약가치(predicted_aav)`를 분리 추정한다.
 - **운영 원칙**: 성과 모델은 시장 가격과 독립적으로 선수의 실력 가치를 추정하고, 시장 모델은 실제 계약 시장에서 형성될 가격을 예측한다. 서비스는 두 값을 모두 저장하고 차이(`market premium / discount`)를 함께 표시한다.
 
 - **성과 모델 (Performance Model)**:
@@ -777,20 +775,20 @@ PECOTA 같은 다년 예측을 직접 재현하는 것은 범위가 크므로, �
   - **입력**: 직전 시즌 WAR, 최근 2~4시즌 핵심 성적, 나이, 포지션, 경력 연차, 타자 세부 지표(파워-스피드, 볼넷 선별 능력 등), 투수 세부 지표(삼진 능력, 주자 억제, 이닝 소화, 팀 승리 기여도 등)
   - **입력 원칙**: 통산 성적은 보조 변수로만 사용하고, 포스트시즌 성적은 기본 입력에서 제외하거나 별도 실험 변수로 둔다.
   - **구현**: 1차 후보군은 `Linear/Ridge/Lasso`와 `XGBoost/LightGBM`이다. 동일한 시즌 윈도우 피처셋으로 두 계열을 모두 학습해 비교하고, 유사 선수 기반 모델과 시계열 딥러닝은 후속 고도화 단계에서 추가 검토한다.
-  - **출력**: `predicted_war`, 주요 성적 전망, 불확실성 구간
+  - **출력**: `predicted_war`, 주요 성적 전망
   - **가치 환산**: 예측 WAR는 포지션별 `$ / WAR` 환산 계수와 필요 시 팀 상황 보정치를 적용해 `predicted_value`로 변환한다.
   - **포지션 세분화 원칙**: 동일 포지션군 내에서도 시장 가격 차이가 크면 역할군을 분리한다. 예시로 연구 참고 사례에서는 투수 `CL`, 타자 `UT`가 높은 WAR당 달러 가치를 보였다.
   - **계산식**: `predicted_value = predicted_war x dollar_per_war(position_group)`
 
 - **시장 모델 (Market Model)**:
-  - **종속 변수(DV)**: 새 계약의 기준시점 보정 평균 연봉(`real_aav`)
+  - **종속 변수(DV)**: 새 계약의 기준시점 보정 연평균 계약가치(`real_aav`)
   - **학습 샘플 정의**: 학습 데이터에는 선수가 **새로운 계약을 맺는 시점**의 player-season만 포함한다. 계약 기간 중간 시즌이나 임의의 시즌 관측치는 시장 모델의 감독학습 샘플에서 제외한다.
-  - **입력**: 성과 모델의 `predicted_war`와 성적 전망, 현재 연봉, 최근/통산 성적, 나이, 포지션, FA 여부, 사용자가 업로드한 `COT's Contracts` 기반 과거 계약 정보, salary 이력 데이터, 포지션별 시장 AAV 분포, IMF SDMX API에서 수집한 CPI 기반 인플레이션 보정값, 팀 페이롤/시장 규모, 재계약 여부
-  - **학습 타깃**: `real_aav`를 직접 타깃으로 두고, `aav`와 `compensation`은 원시값 보존 및 검증 지표로 함께 관리한다.
-  - **모델 후보**: `Linear/Ridge/Lasso`와 `XGBoost/LightGBM`를 동일 우선순위의 1차 후보로 둔다. MLP 기반 tabular 딥러닝과 Quantile Regression은 필요 시 후속 실험으로 확장한다.
-  - **출력**: `predicted_aav`, 추천 계약 기간, 계약 범위 밴드(P10/P50/P90)
+  - **입력**: 성과 모델의 `predicted_war`와 성적 전망, 현재 계약 조건, 최근/통산 성적, 나이, 포지션, FA 여부, 사용자가 업로드한 `COT's Contracts` 기반 과거 계약 정보, 포지션별 시장 AAV 분포, IMF SDMX API에서 수집한 미국 CPI 기반 인플레이션 보정값, 팀 페이롤/시장 규모, 재계약 여부
+  - **학습 타깃**: `real_aav`를 직접 타깃으로 두고, `aav`는 원시값 보존 및 검증 지표로 함께 관리한다.
+  - **모델 후보**: `Linear/Ridge/Lasso`와 `XGBoost/LightGBM`를 동일 우선순위의 1차 후보로 둔다. MLP 기반 tabular 딥러닝은 필요 시 후속 실험으로 확장한다.
+  - **출력**: `predicted_aav`, 추천 계약 기간
 
-- **서비스 반영**: 선수 상세 페이지와 시뮬레이션 화면에서 현재 계약, `predicted_value`, `predicted_aav`를 함께 비교해 표시한다.
+- **서비스 반영**: 선수 상세 페이지와 시뮬레이션 화면에서 성과 모델 결과(`predicted_war`, `predicted_value`)와 시장 모델 결과(`predicted_aav`, 추천 계약 기간)를 함께 비교해 표시한다.
 
 #### 6.7.7. 모델 선택 및 앙상블
 
@@ -824,11 +822,10 @@ PECOTA 같은 다년 예측을 직접 재현하는 것은 범위가 크므로, �
   - 반영 포인트: `승수의 팀별 한계가치는 비선형적임`, `선수 가격 평가는 팀 내부 가치와 시장 가격을 함께 봐야 함`, `팀 상황에 따른 보정 가치 해석`
   - 비고: 팀원 이시윤 조사
 - Baseball Prospectus. *COT's Contracts*. https://legacy.baseballprospectus.com/compensation/cots/
-  - 적용 영역: 5.6.3 계약/보상 데이터, 6.2 데이터 파이프라인, 6.7.6 가치 추정 이중 모델
-  - 반영 포인트: `historical compensation 데이터 원천`, `Google Sheets 다운로드 후 적재하는 계약 데이터 소스`, `AAV/보상 모델의 감독학습 타깃 구성`, `salary 원천 데이터`
+  - 적용 영역: 5.6.3 계약 데이터, 6.2 데이터 파이프라인, 6.7.6 가치 추정 이중 모델
+  - 반영 포인트: `historical contract 데이터 원천`, `Google Sheets 다운로드 후 적재하는 계약 데이터 소스`, `AAV 모델의 감독학습 타깃 구성`
   - 관련 시트:
     - 계약/AAV 시트: https://docs.google.com/spreadsheets/d/1bXUPBabVf82y0m2KaZ0F9Fno9xwZ2pmepbFvMBX_TEM/
-    - salary 시트: https://docs.google.com/spreadsheets/d/12XSXOQpjDJDCJKsA4xC1e_9FlS11aeioZy_p1nqpclg/
 - IMF. *SDMX API*.
-  - 적용 영역: 4 데이터 흐름, 5.1 예측 파이프라인, 5.6.3 계약/보상 데이터, 6.2 데이터 파이프라인, 6.7.6 가치 추정 이중 모델
-  - 반영 포인트: `CPI 시계열 수집`, `명목 AAV의 기준시점 실질 AAV 환산`, `시장 모델 타깃 표준화`, `인플레이션 보정 재현성 확보`
+  - 적용 영역: 4 데이터 흐름, 5.1 예측 파이프라인, 5.6.3 계약 데이터, 6.2 데이터 파이프라인, 6.7.6 가치 추정 이중 모델
+  - 반영 포인트: `미국 CPI 시계열 수집`, `명목 AAV의 기준시점 실질 AAV 환산`, `시장 모델 타깃 표준화`, `인플레이션 보정 재현성 확보`
