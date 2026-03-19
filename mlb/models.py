@@ -137,3 +137,38 @@ class MLBSimilarPlayer(models.Model):
         unique_together = ['player', 'similar_player']
         verbose_name = 'MLB Similar Player'
         verbose_name_plural = 'MLB Similar Players'
+
+
+class ValuationSettings(models.Model):
+    """
+    Global valuation settings for the MLB app.
+
+    Currently only stores which $/WAR engine to use when valuing players:
+    - 'linear': linear regression-based $/WAR by position (from scripts/estimate_position_dollars_per_war.py)
+    - 'ml': nonlinear ML/DL-based engine.
+    """
+
+    VALUATION_METHOD_LINEAR = "linear"
+    VALUATION_METHOD_ML = "ml"
+
+    VALUATION_METHOD_CHOICES = [
+        (VALUATION_METHOD_LINEAR, "Linear regression (recommended)"),
+        (VALUATION_METHOD_ML, "Nonlinear ML/DL (experimental)"),
+    ]
+
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    valuation_method = models.CharField(
+        max_length=16,
+        choices=VALUATION_METHOD_CHOICES,
+        default=VALUATION_METHOD_LINEAR,
+    )
+
+    class Meta:
+        verbose_name = "Valuation Settings"
+        verbose_name_plural = "Valuation Settings"
+
+    @classmethod
+    def get_solo(cls) -> "ValuationSettings":
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+

@@ -1,6 +1,6 @@
 from django import forms
 
-from .models import MLBPlayer
+from .models import MLBPlayer, ValuationSettings
 
 
 class PlayerSearchForm(forms.Form):
@@ -20,3 +20,9 @@ class PlayerSearchForm(forms.Form):
         choices=[('', '전체')] + list(MLBPlayer.POSITION_CHOICES),
         widget=forms.Select(attrs={'class': 'form-select'}),
     )
+
+
+class ValuationSettingsForm(forms.ModelForm):
+    class Meta:
+        model = ValuationSettings
+        fields = ["valuation_method"]

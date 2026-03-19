@@ -4,9 +4,10 @@ from pathlib import Path
 
 from django.conf import settings
 from django.http import FileResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 
-from .models import MLBPlayer
+from .forms import ValuationSettingsForm
+from .models import MLBPlayer, ValuationSettings
 
 
 LEADERBOARD_CSV = Path(settings.BASE_DIR) / 'data' / 'bp_export_20260312.csv'
@@ -283,3 +284,17 @@ def player_detail(request, pk):
         'forecast_data': forecast_data,
     }
     return render(request, 'mlb/player_detail.html', context)
+
+
+def valuation_settings_view(request):
+    """Global valuation settings page for choosing $/WAR engine."""
+    settings_obj = ValuationSettings.get_solo()
+    if request.method == "POST":
+        form = ValuationSettingsForm(request.POST, instance=settings_obj)
+        if form.is_valid():
+            form.save()
+            return redirect('mlb:valuation_settings')
+    else:
+        form = ValuationSettingsForm(instance=settings_obj)
+
+    return render(request, 'mlb/valuation_settings.html', {'form': form})
