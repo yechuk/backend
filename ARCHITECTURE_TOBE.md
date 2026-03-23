@@ -16,6 +16,18 @@
 
 ## 2. 서비스 배경
 
+### 2.1. 연구 문제 정의
+
+기존 연구들은 타율이나 출루율과 같은 성적 지표가 연봉에 미치는 영향을 분석해 왔다. 그러나 실제 구단 운영에서는 선수의 미래 성적을 정확히 예측하고, 이를 바탕으로 계약 기간과 금액을 합리적으로 결정할 수 있는 방법론이 아직 충분하지 않다. 이 때문에 단장은 선수 영입과 재계약 과정에서 최적의 의사결정을 내리는 데 어려움을 겪는다.
+
+과거에는 전통적인 야구 전문가들이 중요하게 여긴 지표들이 실제 승리 기여도와 일치하지 않는 경우가 많았고, 그 결과 노동시장에서 자원이 비효율적으로 배분되었다. 대표적으로 오클랜드 어슬레틱스(Oakland Athletics)는 이러한 시장의 왜곡을 활용해, 당시 저평가되어 있던 출루 능력을 가진 선수들을 낮은 비용으로 영입함으로써 경쟁 우위를 확보했다. 이후 다른 구단들도 이 전략을 모방하면서, 2004년경에는 시장이 점차 조정되어 이러한 가치 왜곡이 상당 부분 해소된 것으로 보고되었다(Hakes & Sauer, 2006).
+
+하지만 오늘날에도 시장이 선수의 실제 경기 기여를 완전히 반영한다고 보기는 어렵다. 선수의 계약 가치는 과거 성적이나 미래 예상 성과뿐 아니라, 마케팅 가치, 스타성, 타 구단과의 경쟁 압력 등 비성적 요인의 영향을 크게 받기 때문이다. 그 결과, 선수가 경기장에서 창출하는 실제 성적 기반 가치와 시장에서 형성된 연봉 또는 계약 가치 사이에는 여전히 차이가 발생할 수 있다.
+
+따라서 본 연구는 기존의 시장 중심 계약 가치가 선수의 실제 생산성을 얼마나 충실하게 반영하는지 문제를 제기하고, 이를 검토하기 위해 대체 선수(리그 최저 수준의 최소 연봉을 받는 가상의 선수) 대비 팀 승리 기여도를 나타내는 지표인 WAR(Wins Above Replacement) 기반의 성적 예측 모델과 시장 가치 모델을 비교·분석하고자 한다(Barnes & Bjarnadóttir, 2016). 또한 현대의 선수 시장에서도 아직 충분히 반영되지 못한 성과 지표가 존재할 가능성에 주목하며, 복합적인 패턴을 학습할 수 있는 모델을 통해 이러한 한계를 보완할 수 있을 것으로 기대한다.
+
+### 2.2. 본 문서·플랫폼의 모델 목표
+
 본 단계의 모델 목표는 **FA 선수의 시장 계약가치와 성과기반 예측가치를 함께 추정하는 것**이다.
 
 이를 위해 시장에서 실제로 형성되는 계약가격(`predicted_aav`)과, 선수의 미래 WAR 기반 내재가치(`predicted_value`)를 분리해 추정한다. 두 값의 차이는 단순 예측값이 아니라, 영입/재계약/방출 판단에 쓰이는 의사결정 보조 지표로 해석한다.
@@ -31,7 +43,7 @@ flowchart LR
     end
 
     subgraph heroku [HerokuRuntime]
-        Web@{ img: "https://cdn.simpleicons.org/django/092E20", label: "Web / Application Layer (Django + Gunicorn)", pos: "b", w: 60, constraint: "on" }
+        Web["Web / Application Layer<br/>(Django + Gunicorn)"]
     end
 
     subgraph dataLayer [DataLayer]
@@ -50,8 +62,8 @@ flowchart LR
     subgraph offline [OfflinePipelines]
         Import["Import<br/>Normalize"]
         ETL["ETL<br/>Feature Eng."]
-        LinearFit@{ img: "./assets/linear-model-icon.svg", label: "Linear model ($/WAR)", pos: "b", w: 60, constraint: "on" }
-        NonLinearFit@{ img: "./assets/non-linear-model-icon.svg", label: "Non-linear model ($/WAR, optional)", pos: "b", w: 60, constraint: "on" }
+        LinearFit["Linear model<br/>($/WAR)"]
+        NonLinearFit["Non-linear model<br/>($/WAR, optional)"]
         PerfTrain["Perf model<br/>(WAR)"]
         MarketTrain["Market model<br/>(AAV)"]
         Eval["Evaluate<br/>Validate"]
@@ -196,14 +208,6 @@ sequenceDiagram
 3. **훈련 데이터셋 구성(ETL)** — 모델 학습 시에는 서비스 DB에 적재된 원천/정규화 데이터를 그대로 바로 사용하기보다, 오프라인 `ETL + 검증` 단계를 거쳐 결측 처리, 스키마 정합성 검증, 시즌 정렬, CPI 기준시점 보정, 타깃 생성, 학습/평가 분할이 반영된 훈련 데이터셋으로 별도 구성한다. 이때 시장 모델은 모든 계약 레코드를 그대로 쓰지 않고, **선수가 새로운 계약을 체결한 시점의 레코드만** 학습 샘플로 필터링해 사용한다.
 
 4. **모델 학습 결과의 서비스 연결** — 성과 모델과 시장 모델은 오프라인에서 학습·검증을 거친 뒤 아티팩트로 저장되고, 온라인 추론 계층은 이를 사용해 상세 페이지 요청 시 `predicted_war`, `predicted_value`, `predicted_aav`를 계산한다. 최종적으로 선수 상세 페이지에서는 성과 모델 결과와 시장 모델 결과를 함께 보여 주어 성과 전망과 시장 평가를 동시에 해석할 수 있도록 한다.
-
-### 참고: 외부 영상 메모
-
-- YouTube: `https://www.youtube.com/watch?v=tR-WFirYXh4`
-- 확인한 주제: MLB 구단이 FA(자유계약선수)를 평가할 때 과거 성적만 보는 것이 아니라, 미래 퍼포먼스와 예상 가치를 어떻게 투영하는지 설명하는 내용
-- 우리 프로젝트와의 연결점: 선수의 시장 계약 금액을 그대로 따르기보다, 구단 관점에서 미래 성과 기반의 적정 가치를 추정해야 한다는 문제의식과 맞닿아 있음
-- 비고: 영상 페이지 전문을 직접 확보한 것은 아니고, 공개 소개 문구를 바탕으로 핵심 주제를 요약한 메모임
-- 비고: 팀원 변준영 조사
 
 ## 5. 선수 예측 및 가치 판단 설계
 
@@ -706,10 +710,10 @@ PECOTA 같은 다년 예측을 직접 재현하는 것은 범위가 크므로, �
 
 ### 6.7. 선수 미래 실적 예측 모델
 
-선수별 미래 성적(예: AVG, OPS, WAR, ERA, FIP 등)을 산출하기 위해 현 단계에서는 **선형모델과 Gradient Boosting Tree(GBT)를 1차 실험군**으로 사용한다. 성과 모델과 시장 모델 모두 동일하게 `Linear/Ridge/Lasso`와 `XGBoost/LightGBM`를 비교하고, 유사 선수 기반 예측과 시계열 딥러닝은 후속 고도화 후보로 유지한다. 학습·평가 데이터는 **Lahman Database**를 사용하되, 최근 연구 사례처럼 시즌별 다변량 시계열 구성을 우선 검토한다.
+선수별 미래 성적(예: AVG, OPS, WAR, ERA, FIP 등)을 산출하기 위해 현 단계에서는 **선형모델과 Gradient Boosting Tree(GBT)를 1차 실험군**으로 사용한다. 성과 모델과 시장 모델 모두 동일하게 `Linear/Ridge/Lasso`와 `XGBoost/LightGBM`를 비교하고, 유사 선수 기반 예측과 시계열 딥러닝은 후속 고도화 후보로 유지한다. 학습·평가 데이터는 **Lahman Database**를 사용하되, 최근 연구 사례처럼 시즌별 다변량 시계열 구성을 우선 검토한다. 프로젝트 전체의 성능 검증 프레임(정량·정성, 기준 시점·예측 구간)은 **6.7.8**에서 정한다.
 
 - **모델 평가 지표**: `R²`, `MAPE`, `RMSE`
-- **검증 원칙**: train/validation/test는 연도 기준으로 분리하고, 두 모델군 모두 동일한 피처셋과 동일한 시계열 분할 조건에서 비교한다.
+- **검증 원칙**: train/validation/test는 연도 기준으로 분리하고, 두 모델군 모두 동일한 피처셋과 동일한 시계열 분할 조건에서 비교한다. 구체적인 학습·검증 구간과 미래 시즌에 대한 홀드아웃 검증은 **6.7.8**의 기준 시점(2022년) 및 예측 대상 연도(2023–2025년) 설정과 맞춘다.
 
 #### 6.7.1. 학습 데이터 — Lahman Database
 
@@ -800,32 +804,71 @@ PECOTA 같은 다년 예측을 직접 재현하는 것은 범위가 크므로, �
 
 > **연구 참고 방향**: 최근 야구 성적 예측 연구에서는 `과거 2~4시즌의 다변량 입력`, `sliding window 기반 다음 시즌 예측`, `R²/RMSE/MAPE 기반 비교`, `SHAP를 통한 해석`이 유효한 설계로 제시된다. 특히 Sun et al. (2022)의 LSTM 기반 MLB 홈런 예측은 `시즌 시계열 + LSTM`이 실용적인 베이스라인이 될 수 있음을 보여준다. 본 프로젝트는 이를 참고하되, 단일 타깃 예측에 머물지 않고 타자/투수 다지표 예측과 장기 성과 해석으로 확장한다.
 
-#### 6.7.8. 참고문헌 및 외부 참고자료
+#### 6.7.8. 성능 평가 (정량·정성 및 기준 시점)
 
-- Sun, H.-C., Lin, T.-Y., Tsai, Y.-L. (2022). *Performance Prediction in Major League Baseball by Long Short-Term Memory Networks*. arXiv. https://doi.org/10.48550/arXiv.2206.09654
+본 프로젝트의 성능 평가는 **정량적 평가**와 **정성적 평가**를 함께 사용해 진행한다. 정량적 평가는 예측 모델의 성능을 수치적으로 검증하기 위한 것이며, 정성적 평가는 시스템이 실제 의사결정 지원 도구로서 얼마나 타당하고 활용 가능한지를 살펴보기 위한 것이다. 객관적인 평가를 위해 **기준 시점은 2022년**으로 설정하고, **2023년부터 2025년까지**의 데이터를 예측 대상으로 삼아 성능을 검증한다.
+
+정량 평가에서는 앞서 6.7에서 정한 지표(`R²`, `MAPE`, `RMSE` 등)와 연도 기준 분할 원칙을 따르되, 학습·튜닝이 끝난 모델에 대해 위 예측 대상 구간에서의 오차·안정성을 보고한다.
+
+## 참고문헌
+
+학술 문헌, 데이터·API, UI 참고 서비스, 기타 링크를 본 문서에서 한곳에 정리한다. 각 항목 아래의 부가 설명은 문서 내 어느 절과 연결되는지와 반영 포인트를 요약한 것이다.
+
+### 학술 문헌 및 분석 기사
+
+- **Hakes, J. K., & Sauer, R. D. (2006).** An economic evaluation of the Moneyball hypothesis. *Journal of Economic Perspectives*, 20(3), 173–186.
+  - 적용 영역: 2.1 연구 문제 정의(머니볼·시장 조정 논의)
+  - 반영 포인트: 전통 지표와 승리 기여 간 괴리, 출루 능력 저평가와 시장 왜곡, 2004년경 시장 조정에 대한 실증 평가
+
+- **Barnes, S. L., & Bjarnadóttir, M. V. (2016).** Great expectations: An analysis of major league baseball free agent performance. *Statistical Analysis and Data Mining: The ASA Data Science Journal*, 9, 295–309. https://doi.org/10.1002/sam.11311
+  - 적용 영역: 2.1 연구 문제 정의, 5.1.1 모델 IV/DV, 6.6 장기 예측 활용 관점, 6.7 유사 선수 및 FA 성과 해석
+  - 반영 포인트: 자유계약선수 성과 기대치와 실제 성과 비교, 계약 의사결정에서 장기 성과 전망의 중요성, 시장 계약과 선수 퍼포먼스 간 간극 해석
+
+- **Sun, H.-C., Lin, T.-Y., & Tsai, Y.-L. (2022).** *Performance Prediction in Major League Baseball by Long Short-Term Memory Networks.* arXiv. https://doi.org/10.48550/arXiv.2206.09654
   - 적용 영역: 6.7 시계열 예측 모델 설계
-  - 반영 포인트: `선수별 시즌 시계열의 sliding window 구성`, `LSTM 계열 베이스라인 설정`, `다음 시즌 예측 문제 정의`, `RMSE/MAE 기반 비교 평가`
+  - 반영 포인트: 선수별 시즌 시계열의 sliding window 구성, LSTM 계열 베이스라인 설정, 다음 시즌 예측 문제 정의, RMSE/MAE 기반 비교 평가
   - 비고: 팀원 조윤주 조사
-- Lee, W., Kim, J. H. (2025). *Pitcher Performance Prediction Major League Baseball (MLB) by Temporal Fusion Transformer*. **Computers, Materials & Continua**, 83(3), 5393-5412. https://doi.org/10.32604/cmc.2025.065413
+
+- **Lee, W., & Kim, J. H. (2025).** *Pitcher Performance Prediction Major League Baseball (MLB) by Temporal Fusion Transformer.* *Computers, Materials & Continua*, 83(3), 5393–5412. https://doi.org/10.32604/cmc.2025.065413
   - 적용 영역: 6.7 TFT 기반 성능 예측 모델 설계
-  - 반영 포인트: `Temporal Fusion Transformer(TFT) 적용`, `2~4시즌 길이 입력 시퀀스 비교`, `RMSE/MAE/MAPE 기반 성능 평가`, `설명 가능한 변수 중요도 분석`
+  - 반영 포인트: Temporal Fusion Transformer(TFT) 적용, 2~4시즌 길이 입력 시퀀스 비교, RMSE/MAE/MAPE 기반 성능 평가, 설명 가능한 변수 중요도 분석
   - 비고: 팀원 조윤주 조사
-- Barnes, S. L., and Bjarnadóttir, M. V. (2016). *Great expectations: An analysis of major league baseball free agent performance*. **Statistical Analysis and Data Mining: The ASA Data Science Journal**, 9, 295-309. https://doi-org-ssl.eproxy.sejong.ac.kr/10.1002/sam.11311
-  - 적용 영역: 6.6 장기 예측 활용 관점, 6.7 유사 선수 및 FA 성과 해석 참고
-  - 반영 포인트: `자유계약선수 성과 기대치와 실제 성과 비교`, `계약 의사결정에서 장기 성과 전망의 중요성`, `시장 계약과 선수 퍼포먼스 간 간극 해석`
-- SABR. *The Sultan of Swag: Babe Ruth as a Financial Investment*. https://sabr.org/journal/article/the-sultan-of-swag-babe-ruth-as-a-financial-investment-4/?utm_source
-  - 적용 영역: 참고 후보
-  - 반영 포인트: `선수 가치와 재무적 해석 관련 참고 가능 자료`
-  - 비고: 팀원 이시윤 조사
-- Cameron, D. (2012-01-25). *Win Curves and Player Pricing*. FanGraphs. https://blogs.fangraphs.com/win-curves-and-player-pricing/
+
+- **Cameron, D. (2012, January 25).** *Win Curves and Player Pricing.* FanGraphs. https://blogs.fangraphs.com/win-curves-and-player-pricing/
   - 적용 영역: 6.6.1 계약/AAV 의사결정 보완 관점
-  - 반영 포인트: `승수의 팀별 한계가치는 비선형적임`, `선수 가격 평가는 팀 내부 가치와 시장 가격을 함께 봐야 함`, `팀 상황에 따른 보정 가치 해석`
+  - 반영 포인트: 승수의 팀별 한계가치는 비선형적임, 선수 가격 평가는 팀 내부 가치와 시장 가격을 함께 봐야 함, 팀 상황에 따른 보정 가치 해석
   - 비고: 팀원 이시윤 조사
-- Baseball Prospectus. *COT's Contracts*. https://legacy.baseballprospectus.com/compensation/cots/
+
+- **SABR.** *The Sultan of Swag: Babe Ruth as a Financial Investment.* https://sabr.org/journal/article/the-sultan-of-swag-babe-ruth-as-a-financial-investment-4/?utm_source
+  - 적용 영역: 참고 후보
+  - 반영 포인트: 선수 가치와 재무적 해석 관련 참고 가능 자료
+  - 비고: 팀원 이시윤 조사
+
+### 데이터 세트·API·공개 자료
+
+- **Lahman Baseball Database** (역사적 MLB 선수·팀·시즌 기록). http://www.seanlahman.com/baseball-archive/statistics/
+  - 적용 영역: 6.7.1 학습 데이터
+  - 반영 포인트: 전처리 후 학습·검증·테스트에 사용하는 역사적 시즌 기록 원천
+
+- **Baseball Prospectus. *COT's Contracts*.** https://legacy.baseballprospectus.com/compensation/cots/
   - 적용 영역: 5.6.3 계약 데이터, 6.2 데이터 파이프라인, 6.7.6 가치 추정 이중 모델
-  - 반영 포인트: `historical contract 데이터 원천`, `Google Sheets 다운로드 후 적재하는 계약 데이터 소스`, `AAV 모델의 감독학습 타깃 구성`
-  - 관련 시트:
-    - 계약/AAV 시트: https://docs.google.com/spreadsheets/d/1bXUPBabVf82y0m2KaZ0F9Fno9xwZ2pmepbFvMBX_TEM/
-- IMF. *SDMX API*.
+  - 반영 포인트: historical contract 데이터 원천, Google Sheets 다운로드 후 적재하는 계약 데이터 소스, AAV 모델의 감독학습 타깃 구성
+  - 관련 시트(계약/AAV): https://docs.google.com/spreadsheets/d/1bXUPBabVf82y0m2KaZ0F9Fno9xwZ2pmepbFvMBX_TEM/
+
+- **IMF. SDMX API** (미국 CPI 등 시계열).
   - 적용 영역: 4 데이터 흐름, 5.1 예측 파이프라인, 5.6.3 계약 데이터, 6.2 데이터 파이프라인, 6.7.6 가치 추정 이중 모델
-  - 반영 포인트: `미국 CPI 시계열 수집`, `명목 AAV의 기준시점 실질 AAV 환산`, `시장 모델 타깃 표준화`, `인플레이션 보정 재현성 확보`
+  - 반영 포인트: 미국 CPI 시계열 수집, 명목 AAV의 기준시점 실질 AAV 환산, 시장 모델 타깃 표준화, 인플레이션 보정 재현성 확보
+  - 참고: https://data.imf.org
+
+### UI·서비스 참고 및 기타
+
+- **Baseball Prospectus** (레이아웃·지표 참고). https://www.baseballprospectus.com/
+  - 적용 영역: 6.6 참고 서비스
+
+- **STATIZ** (정보 탐색·랭킹 레이아웃 참고). https://www.statiz.co.kr/
+  - 적용 영역: 6.6 참고 서비스
+
+- **YouTube** (외부 영상 메모). https://www.youtube.com/watch?v=tR-WFirYXh4
+  - 확인한 주제: MLB 구단이 FA(자유계약선수)를 평가할 때 과거 성적만 보는 것이 아니라, 미래 퍼포먼스와 예상 가치를 어떻게 투영하는지 설명하는 내용
+  - 프로젝트 연결점: 선수의 시장 계약 금액을 그대로 따르기보다, 구단 관점에서 미래 성과 기반의 적정 가치를 추정해야 한다는 문제의식과 맞닿아 있음
+  - 비고: 영상 전문을 직접 확보한 것은 아니며, 공개 소개 문구를 바탕으로 핵심 주제를 요약한 메모임. 팀원 변준영 조사
