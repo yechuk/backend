@@ -17,8 +17,24 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import include, path
 
+from mlb import views as mlb_views
+
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('api/teams', mlb_views.api_teams, name='api_teams_no_slash'),
+    path('api/teams/', mlb_views.api_teams, name='api_teams'),
+    path('api/teams/<str:team_code>/players', mlb_views.api_team_players, name='api_team_players_no_slash'),
+    path('api/teams/<str:team_code>/players/', mlb_views.api_team_players, name='api_team_players'),
+    path(
+        'api/teams/<str:team_code>/players/<str:player_id>',
+        mlb_views.api_team_player_detail,
+        name='api_team_player_detail_no_slash',
+    ),
+    path(
+        'api/teams/<str:team_code>/players/<str:player_id>/',
+        mlb_views.api_team_player_detail,
+        name='api_team_player_detail',
+    ),
     path('', include('roster.urls')),
     path('mlb/', include('mlb.urls')),
 ]

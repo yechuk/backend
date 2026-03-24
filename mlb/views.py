@@ -3,15 +3,17 @@ import json
 from pathlib import Path
 
 from django.conf import settings
-from django.http import FileResponse
+from django.db.models import Count
+from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
 from .forms import ValuationSettingsForm
-from .models import MLBPlayer, ValuationSettings
+from .models import MLBApiStatLine, MLBPlayer, ValuationSettings
 
 
 LEADERBOARD_CSV = Path(settings.BASE_DIR) / 'data' / 'bp_export_20260312.csv'
 LEADERBOARD_PAGE_SIZE = 60
+SUPPORTED_STAT_VIEWS = {'batting', 'pitching'}
 
 
 def _resolve_leaderboard_player_pk(name, team):
@@ -49,6 +51,194 @@ def _format_rate(value):
     if 0 <= value < 1:
         return text[1:]
     return text
+
+
+def _normalize_stat_view(raw_view):
+    view = (raw_view or 'batting').strip().lower()
+    if view not in SUPPORTED_STAT_VIEWS:
+        return 'batting'
+    return view
+
+
+def _stat_queryset(view):
+    return MLBApiStatLine.objects.filter(stat_view=view)
+
+
+def _available_stat_seasons(view):
+    seasons = list(
+        _stat_queryset(view)
+        .values_list('season', flat=True)
+        .distinct()
+        .order_by('-season')
+    )
+    if not seasons:
+        return []
+
+    return seasons
+
+
+def _resolve_stat_season(view, raw_season):
+    seasons = _available_stat_seasons(view)
+    if not seasons:
+        return None
+
+    requested = _to_int(raw_season, 0)
+    if requested in seasons:
+        return requested
+    return seasons[0]
+
+
+def _filter_stat_lines(view, season, team_code=None):
+    qs = _stat_queryset(view)
+    if season is not None:
+        qs = qs.filter(season=season)
+    if team_code:
+        qs = qs.filter(team__iexact=team_code)
+    return qs.exclude(team__in=['', '- - -'])
+
+
+def _player_detail_url(team_code, player_id):
+    return f'/api/teams/{team_code}/players/{player_id}/'
+
+
+def _team_players_url(team_code):
+    return f'/api/teams/{team_code}/players/'
+
+
+def _serialize_stat_player(stat_line):
+    row = stat_line.raw_stats or {}
+    view = stat_line.stat_view
+    base = {
+        'id': stat_line.external_player_id,
+        'player_id': stat_line.external_player_id,
+        'mlbam_id': stat_line.mlbam_id,
+        'name': stat_line.player_name,
+        'name_ascii': stat_line.name_ascii,
+        'team': stat_line.team,
+        'season': stat_line.season,
+        'age': stat_line.age,
+        'view': view,
+    }
+
+    if view == 'pitching':
+        base['stats'] = {
+            'games': _to_int(row.get('G')),
+            'games_started': _to_int(row.get('GS')),
+            'innings_pitched': _to_float(row.get('IP')),
+            'walks': _to_int(row.get('BB')),
+            'hr_per_9': _to_float(row.get('HR/9')),
+            'strikeout_rate': _to_float(row.get('K%')),
+            'fip': _to_float(row.get('FIP')),
+            'war': stat_line.war if stat_line.war is not None else _to_float(row.get('WAR')),
+        }
+    else:
+        base['stats'] = {
+            'games': _to_int(row.get('G')),
+            'plate_appearances': _to_int(row.get('PA')),
+            'home_runs': _to_int(row.get('HR')),
+            'stolen_bases': _to_int(row.get('SB')),
+            'iso': _to_float(row.get('ISO')),
+            'walk_rate': _to_float(row.get('BB%')),
+            'strikeout_rate': _to_float(row.get('K%')),
+            'woba': _to_float(row.get('wOBA')),
+            'wrc_plus': _to_int(row.get('wRC+')) if row.get('wRC+') else None,
+            'babip': _to_float(row.get('BABIP')),
+            'war': stat_line.war if stat_line.war is not None else _to_float(row.get('WAR')),
+        }
+
+    base['detail_url'] = _player_detail_url(base['team'], base['player_id'])
+    return base
+
+
+def _ohtani_image_response():
+    candidates = [
+        ('ohtani.png', 'image/png'),
+        ('ohtani.img', 'image/png'),
+        ('ohtani.jpeg', 'image/jpeg'),
+        ('ohtani.jpg', 'image/jpeg'),
+    ]
+    for filename, content_type in candidates:
+        image_path = settings.BASE_DIR / filename
+        if image_path.exists():
+            return FileResponse(image_path.open('rb'), content_type=content_type)
+
+    raise Http404('Ohtani image file not found.')
+
+
+def api_teams(request):
+    if 'season' not in request.GET and 'view' not in request.GET:
+        return _ohtani_image_response()
+
+    view = _normalize_stat_view(request.GET.get('view'))
+    season = _resolve_stat_season(view, request.GET.get('season'))
+    filtered_lines = _filter_stat_lines(view, season)
+    team_rows = list(
+        filtered_lines
+        .values('team')
+        .annotate(player_count=Count('id'))
+        .order_by('team')
+    )
+    teams = [
+        {
+            'code': row['team'],
+            'name': row['team'],
+            'season': season,
+            'view': view,
+            'player_count': row['player_count'],
+            'players_url': _team_players_url(row['team']),
+        }
+        for row in team_rows
+    ]
+
+    return JsonResponse({
+        'season': season,
+        'view': view,
+        'count': len(teams),
+        'teams': teams,
+        'image_url': '/api/team-image',
+    })
+
+
+def api_team_players(request, team_code):
+    view = _normalize_stat_view(request.GET.get('view'))
+    season = _resolve_stat_season(view, request.GET.get('season'))
+    filtered_lines = _filter_stat_lines(view, season, team_code=team_code)
+
+    if not filtered_lines.exists():
+        return JsonResponse({'message': f'Team {team_code} was not found for season {season}.'}, status=404)
+
+    players = [
+        _serialize_stat_player(stat_line)
+        for stat_line in filtered_lines.order_by('-war', 'player_name')
+    ]
+
+    return JsonResponse({
+        'season': season,
+        'view': view,
+        'team': team_code.upper(),
+        'count': len(players),
+        'players': players,
+    })
+
+
+def api_team_player_detail(request, team_code, player_id):
+    view = _normalize_stat_view(request.GET.get('view'))
+    season = _resolve_stat_season(view, request.GET.get('season'))
+    target_line = _filter_stat_lines(view, season, team_code=team_code).filter(
+        external_player_id=str(player_id)
+    ).first()
+    if target_line is None:
+        return JsonResponse(
+            {'message': f'Player {player_id} was not found for team {team_code} in season {season}.'},
+            status=404,
+        )
+
+    return JsonResponse({
+        'season': season,
+        'view': view,
+        'team': team_code.upper(),
+        'player': _serialize_stat_player(target_line),
+    })
 
 
 def _load_bp_rows():

@@ -1,5 +1,14 @@
+import json
+from decimal import Decimal, InvalidOperation
+
+from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.db import transaction
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
 
 from .forms import ContractForm, PlayerForm, PlayerWithContractForm
@@ -74,3 +83,225 @@ def contract_edit(request, pk):
         form = ContractForm(instance=contract)
 
     return render(request, 'roster/contract_form.html', {'form': form, 'player': player})
+
+
+def _serialize_contract(contract):
+    if contract is None:
+        return None
+
+    return {
+        'id': contract.pk,
+        'total_value': float(contract.total_value),
+        'guaranteed_ratio': float(contract.guaranteed_ratio),
+        'years': contract.years,
+        'start_year': contract.start_year,
+        'guaranteed_amount': float(contract.guaranteed_amount),
+        'net_worth': float(contract.net_worth),
+    }
+
+
+def _serialize_player(player):
+    return {
+        'id': player.pk,
+        'name': player.name,
+        'position': player.position,
+        'jersey_number': player.jersey_number,
+        'years_to_retirement': player.years_to_retirement,
+        'status': player.status,
+        'status_display': player.get_status_display(),
+        'created_at': player.created_at.isoformat(),
+        'updated_at': player.updated_at.isoformat(),
+        'contract': _serialize_contract(getattr(player, 'contract', None)),
+    }
+
+
+def _json_error(message, *, status=400, errors=None):
+    payload = {'message': message}
+    if errors:
+        payload['errors'] = errors
+    return JsonResponse(payload, status=status)
+
+
+def _parse_json_body(request):
+    if not request.body:
+        return {}
+
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+    except json.JSONDecodeError:
+        raise ValidationError({'body': ['Invalid JSON body.']})
+
+    if not isinstance(payload, dict):
+        raise ValidationError({'body': ['JSON body must be an object.']})
+
+    return payload
+
+
+def _coerce_int(value, field_name, *, allow_null=False):
+    if value in (None, ''):
+        if allow_null:
+            return None
+        raise ValidationError({field_name: ['This field is required.']})
+
+    if isinstance(value, bool):
+        raise ValidationError({field_name: ['Enter a whole number.']})
+
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise ValidationError({field_name: ['Enter a whole number.']})
+
+
+def _coerce_decimal(value, field_name):
+    if value in (None, ''):
+        raise ValidationError({field_name: ['This field is required.']})
+
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, ValueError, TypeError):
+        raise ValidationError({field_name: ['Enter a valid number.']})
+
+
+def _apply_player_payload(player, payload, *, partial):
+    required_fields = {'name', 'position'}
+    if not partial:
+        missing_fields = required_fields - payload.keys()
+        if missing_fields:
+            raise ValidationError({field: ['This field is required.'] for field in sorted(missing_fields)})
+
+    if 'name' in payload:
+        player.name = payload['name']
+    if 'position' in payload:
+        player.position = payload['position']
+    if 'status' in payload:
+        player.status = payload['status']
+    if 'jersey_number' in payload:
+        player.jersey_number = _coerce_int(payload['jersey_number'], 'jersey_number', allow_null=True)
+    if 'years_to_retirement' in payload:
+        player.years_to_retirement = _coerce_int(
+            payload['years_to_retirement'],
+            'years_to_retirement',
+            allow_null=True,
+        )
+
+    player.full_clean()
+    player.save()
+    return player
+
+
+def _apply_contract_payload(player, payload, *, partial):
+    if payload is None:
+        Contract.objects.filter(player=player).delete()
+        return None
+
+    if not isinstance(payload, dict):
+        raise ValidationError({'contract': ['Contract must be an object or null.']})
+
+    try:
+        contract = player.contract
+        is_new = False
+    except Contract.DoesNotExist:
+        contract = Contract(player=player)
+        is_new = True
+
+    required_fields = {'total_value', 'guaranteed_ratio', 'years'}
+    if is_new or not partial:
+        missing_fields = required_fields - payload.keys()
+        if missing_fields:
+            raise ValidationError(
+                {'contract': [f'Missing required contract fields: {", ".join(sorted(missing_fields))}.']}
+            )
+
+    if 'total_value' in payload:
+        contract.total_value = _coerce_decimal(payload['total_value'], 'total_value')
+    if 'guaranteed_ratio' in payload:
+        contract.guaranteed_ratio = _coerce_decimal(payload['guaranteed_ratio'], 'guaranteed_ratio')
+    if 'years' in payload:
+        contract.years = _coerce_int(payload['years'], 'years')
+    if 'start_year' in payload:
+        contract.start_year = _coerce_int(payload['start_year'], 'start_year', allow_null=True)
+
+    contract.full_clean()
+    contract.save()
+    return contract
+
+
+@require_http_methods(['GET'])
+def api_team_image(request):
+    candidates = [
+        ('ohtani.png', 'image/png'),
+        ('ohtani.img', 'image/png'),
+        ('ohtani.jpeg', 'image/jpeg'),
+        ('ohtani.jpg', 'image/jpeg'),
+    ]
+    for filename, content_type in candidates:
+        image_path = settings.BASE_DIR / filename
+        if image_path.exists():
+            return FileResponse(image_path.open('rb'), content_type=content_type)
+
+    raise Http404('Ohtani image file not found.')
+
+
+@csrf_exempt
+@require_http_methods(['GET', 'POST'])
+def api_players(request):
+    if request.method == 'GET':
+        players = Player.objects.select_related('contract').all()
+        status = request.GET.get('status')
+        valid_statuses = {choice for choice, _ in Player.STATUS_CHOICES}
+        if status in valid_statuses:
+            players = players.filter(status=status)
+
+        serialized_players = [_serialize_player(player) for player in players]
+        return JsonResponse({'count': len(serialized_players), 'players': serialized_players})
+
+    try:
+        payload = _parse_json_body(request)
+    except ValidationError as exc:
+        return _json_error('Invalid request body.', errors=exc.message_dict)
+
+    contract_supplied = 'contract' in payload
+    contract_payload = payload.pop('contract', None)
+
+    try:
+        with transaction.atomic():
+            player = _apply_player_payload(Player(), payload, partial=False)
+            if contract_supplied:
+                _apply_contract_payload(player, contract_payload, partial=False)
+            player.refresh_from_db()
+    except ValidationError as exc:
+        return _json_error('Validation failed.', errors=exc.message_dict)
+
+    return JsonResponse(_serialize_player(player), status=201)
+
+
+@csrf_exempt
+@require_http_methods(['GET', 'PATCH', 'PUT', 'DELETE'])
+def api_player_detail(request, pk):
+    player = get_object_or_404(Player.objects.select_related('contract'), pk=pk)
+
+    if request.method == 'GET':
+        return JsonResponse(_serialize_player(player))
+
+    if request.method == 'DELETE':
+        player.delete()
+        return HttpResponse(status=204)
+
+    try:
+        payload = _parse_json_body(request)
+    except ValidationError as exc:
+        return _json_error('Invalid request body.', errors=exc.message_dict)
+
+    contract_supplied = 'contract' in payload
+    contract_payload = payload.pop('contract', None)
+
+    try:
+        with transaction.atomic():
+            player = _apply_player_payload(player, payload, partial=request.method == 'PATCH')
+            if contract_supplied:
+                _apply_contract_payload(player, contract_payload, partial=request.method == 'PATCH')
+            player.refresh_from_db()
+    except ValidationError as exc:
+        return _json_error('Validation failed.', errors=exc.message_dict)
+
+    return JsonResponse(_serialize_player(player))

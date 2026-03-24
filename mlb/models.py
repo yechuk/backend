@@ -77,6 +77,39 @@ class MLBPlayerSeason(models.Model):
         return f"{self.player.name} {self.year}"
 
 
+class MLBApiStatLine(models.Model):
+    """DB-backed stat lines used by the /api/teams endpoints."""
+
+    VIEW_BATTING = 'batting'
+    VIEW_PITCHING = 'pitching'
+    VIEW_CHOICES = [
+        (VIEW_BATTING, 'Batting'),
+        (VIEW_PITCHING, 'Pitching'),
+    ]
+
+    stat_view = models.CharField(max_length=20, choices=VIEW_CHOICES, db_index=True)
+    season = models.PositiveIntegerField(db_index=True)
+    team = models.CharField(max_length=10, db_index=True)
+    player_name = models.CharField(max_length=100)
+    name_ascii = models.CharField(max_length=100, blank=True)
+    external_player_id = models.CharField(max_length=32, db_index=True)
+    mlbam_id = models.CharField(max_length=32, blank=True)
+    age = models.PositiveIntegerField(null=True, blank=True)
+    war = models.FloatField(null=True, blank=True)
+    raw_stats = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['stat_view', '-season', 'team', 'player_name']
+        unique_together = ['stat_view', 'season', 'team', 'external_player_id']
+        verbose_name = 'MLB API Stat Line'
+        verbose_name_plural = 'MLB API Stat Lines'
+
+    def __str__(self):
+        return f'{self.stat_view} {self.season} {self.player_name} ({self.team})'
+
+
 class MLBPlayerPrediction(models.Model):
     """선수 예측 데이터 (미래 성적, 적정 가치)"""
 
@@ -171,4 +204,3 @@ class ValuationSettings(models.Model):
     def get_solo(cls) -> "ValuationSettings":
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
-
