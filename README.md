@@ -13,6 +13,19 @@ python manage.py runserver
 
 Visit http://127.0.0.1:8000/
 
+## LSTM Training
+
+Train the WAR forecasting baseline on the season CSVs in `data/`:
+
+```bash
+python scripts/train_lstm_war_model.py
+python scripts/train_lstm_war_model.py --dataset pitching
+python scripts/train_lstm_war_model.py --dataset batting
+```
+
+Running without `--dataset` trains both models and writes artifacts to `model_artifacts/lstm_pitching/` and `model_artifacts/lstm_batting/`.
+The script defaults to CPU. Pass `--device cuda` only if you want GPU training.
+
 ## Features
 
 ### Roster (팀 매니저)
