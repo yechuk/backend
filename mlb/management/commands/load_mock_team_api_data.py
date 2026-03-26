@@ -22,7 +22,7 @@ def _to_float(value):
 
 
 class Command(BaseCommand):
-    help = 'Load data/pitching_mock.csv and data/batting_mock.csv into the DB for /api/teams.'
+    help = 'Load data/pitching.csv and data/batting.csv into the DB for /api/teams.'
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -43,8 +43,8 @@ class Command(BaseCommand):
 
         base_dir = Path(options['base_dir'])
         files = {
-            MLBApiStatLine.VIEW_PITCHING: base_dir / 'data' / 'pitching_mock.csv',
-            MLBApiStatLine.VIEW_BATTING: base_dir / 'data' / 'batting_mock.csv',
+            MLBApiStatLine.VIEW_PITCHING: base_dir / 'data' / 'pitching.csv',
+            MLBApiStatLine.VIEW_BATTING: base_dir / 'data' / 'batting.csv',
         }
 
         total_upserts = 0
@@ -63,21 +63,22 @@ class Command(BaseCommand):
                     }
                     season = _to_int(normalized.get('Season'))
                     team = (normalized.get('Team') or '').upper()
+                    mlbam_id = normalized.get('MLBAMID') or ''
                     external_player_id = normalized.get('PlayerId') or ''
                     player_name = normalized.get('Name') or ''
 
-                    if not season or not team or not external_player_id or not player_name:
+                    if not season or not team or not mlbam_id or not external_player_id or not player_name:
                         continue
 
                     MLBApiStatLine.objects.update_or_create(
                         stat_view=stat_view,
                         season=season,
-                        team=team,
-                        external_player_id=external_player_id,
+                        mlbam_id=mlbam_id,
                         defaults={
+                            'team': team,
                             'player_name': player_name,
                             'name_ascii': normalized.get('NameASCII', ''),
-                            'mlbam_id': normalized.get('MLBAMID', ''),
+                            'external_player_id': external_player_id,
                             'age': _to_int(normalized.get('Age')),
                             'war': _to_float(normalized.get('WAR')),
                             'raw_stats': normalized,
@@ -85,4 +86,4 @@ class Command(BaseCommand):
                     )
                     total_upserts += 1
 
-        self.stdout.write(self.style.SUCCESS(f'Loaded or updated {total_upserts} mock API rows.'))
+        self.stdout.write(self.style.SUCCESS(f'Loaded or updated {total_upserts} API rows.'))

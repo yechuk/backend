@@ -93,7 +93,7 @@ class MLBApiStatLine(models.Model):
     player_name = models.CharField(max_length=100)
     name_ascii = models.CharField(max_length=100, blank=True)
     external_player_id = models.CharField(max_length=32, db_index=True)
-    mlbam_id = models.CharField(max_length=32, blank=True)
+    mlbam_id = models.CharField(max_length=32, blank=True, db_index=True)
     age = models.PositiveIntegerField(null=True, blank=True)
     war = models.FloatField(null=True, blank=True)
     raw_stats = models.JSONField(default=dict, blank=True)
@@ -102,12 +102,68 @@ class MLBApiStatLine(models.Model):
 
     class Meta:
         ordering = ['stat_view', '-season', 'team', 'player_name']
-        unique_together = ['stat_view', 'season', 'team', 'external_player_id']
+        unique_together = ['stat_view', 'season', 'mlbam_id']
         verbose_name = 'MLB API Stat Line'
         verbose_name_plural = 'MLB API Stat Lines'
 
     def __str__(self):
         return f'{self.stat_view} {self.season} {self.player_name} ({self.team})'
+
+
+class MLBRosterEntry(models.Model):
+    """Season roster snapshot imported from MLB StatsAPI."""
+
+    season = models.PositiveIntegerField(db_index=True)
+    team_id = models.PositiveIntegerField(db_index=True)
+    team_name = models.CharField(max_length=100)
+    team_abbreviation = models.CharField(max_length=10, db_index=True)
+    league_name = models.CharField(max_length=100, blank=True)
+    division_name = models.CharField(max_length=100, blank=True)
+    player_id = models.PositiveIntegerField(db_index=True)
+    player_name = models.CharField(max_length=100)
+    player_link = models.CharField(max_length=100, blank=True)
+    jersey_number = models.CharField(max_length=10, blank=True)
+    position_code = models.CharField(max_length=10, blank=True)
+    position_name = models.CharField(max_length=50, blank=True)
+    position_type = models.CharField(max_length=50, blank=True)
+    position_abbreviation = models.CharField(max_length=10, blank=True)
+    status_code = models.CharField(max_length=10, blank=True)
+    status_description = models.CharField(max_length=50, blank=True)
+    raw_data = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-season', 'team_abbreviation', 'player_name']
+        unique_together = ['season', 'team_id', 'player_id']
+        verbose_name = 'MLB Roster Entry'
+        verbose_name_plural = 'MLB Roster Entries'
+
+    def __str__(self):
+        return f'{self.season} {self.team_abbreviation} {self.player_name}'
+
+
+class MLBRosterPhoto(models.Model):
+    """Player photo assets loaded from data/<Team Name>/ into the DB."""
+
+    team_name = models.CharField(max_length=100, db_index=True)
+    player_name = models.CharField(max_length=100)
+    normalized_player_name = models.CharField(max_length=120, db_index=True)
+    original_filename = models.CharField(max_length=255)
+    content_type = models.CharField(max_length=100)
+    image_data = models.BinaryField()
+    byte_size = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['team_name', 'player_name']
+        unique_together = ['team_name', 'normalized_player_name']
+        verbose_name = 'MLB Roster Photo'
+        verbose_name_plural = 'MLB Roster Photos'
+
+    def __str__(self):
+        return f'{self.team_name} {self.player_name}'
 
 
 class MLBPlayerPrediction(models.Model):
