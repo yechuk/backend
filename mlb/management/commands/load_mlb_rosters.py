@@ -83,7 +83,7 @@ class Command(BaseCommand):
                 raise CommandError(f'Unsupported file type: {input_path.suffix}')
             source_label = str(input_path)
 
-        upserts = 0
+        objects = []
         with transaction.atomic():
             for row in rows:
                 row_season = _to_int(row.get('season'))
@@ -94,30 +94,54 @@ class Command(BaseCommand):
                 if not row_season or not team_id or not player_id or not player_name:
                     continue
 
-                MLBRosterEntry.objects.update_or_create(
-                    season=row_season,
-                    team_id=team_id,
-                    player_id=player_id,
-                    defaults={
-                        'team_name': _to_text(row.get('team_name')),
-                        'team_abbreviation': _to_text(row.get('team_abbreviation')),
-                        'league_name': _to_text(row.get('league_name')),
-                        'division_name': _to_text(row.get('division_name')),
-                        'player_name': player_name,
-                        'player_link': _to_text(row.get('player_link')),
-                        'jersey_number': _to_text(row.get('jersey_number')),
-                        'position_code': _to_text(row.get('position_code')),
-                        'position_name': _to_text(row.get('position_name')),
-                        'position_type': _to_text(row.get('position_type')),
-                        'position_abbreviation': _to_text(row.get('position_abbreviation')),
-                        'status_code': _to_text(row.get('status_code')),
-                        'status_description': _to_text(row.get('status_description')),
-                        'raw_data': row,
-                    },
+                objects.append(
+                    MLBRosterEntry(
+                        season=row_season,
+                        team_id=team_id,
+                        player_id=player_id,
+                        team_name=_to_text(row.get('team_name')),
+                        team_abbreviation=_to_text(row.get('team_abbreviation')),
+                        league_name=_to_text(row.get('league_name')),
+                        division_name=_to_text(row.get('division_name')),
+                        player_name=player_name,
+                        player_link=_to_text(row.get('player_link')),
+                        jersey_number=_to_text(row.get('jersey_number')),
+                        position_code=_to_text(row.get('position_code')),
+                        position_name=_to_text(row.get('position_name')),
+                        position_type=_to_text(row.get('position_type')),
+                        position_abbreviation=_to_text(row.get('position_abbreviation')),
+                        status_code=_to_text(row.get('status_code')),
+                        status_description=_to_text(row.get('status_description')),
+                        raw_data=row,
+                    )
                 )
-                upserts += 1
 
-        self.stdout.write(self.style.SUCCESS(f'Loaded or updated {upserts} roster rows from {source_label}.'))
+            if objects:
+                MLBRosterEntry.objects.bulk_create(
+                    objects,
+                    batch_size=500,
+                    update_conflicts=True,
+                    unique_fields=['season', 'team_id', 'player_id'],
+                    update_fields=[
+                        'team_name',
+                        'team_abbreviation',
+                        'league_name',
+                        'division_name',
+                        'player_name',
+                        'player_link',
+                        'jersey_number',
+                        'position_code',
+                        'position_name',
+                        'position_type',
+                        'position_abbreviation',
+                        'status_code',
+                        'status_description',
+                        'raw_data',
+                        'updated_at',
+                    ],
+                )
+
+        self.stdout.write(self.style.SUCCESS(f'Loaded or updated {len(objects)} roster rows from {source_label}.'))
 
     def _resolve_input_path(self, explicit_path, season):
         if explicit_path:

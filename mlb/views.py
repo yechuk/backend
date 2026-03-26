@@ -8,7 +8,7 @@ from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
 from .forms import ValuationSettingsForm
-from .models import MLBApiStatLine, MLBPlayer, ValuationSettings
+from .models import MLBApiStatLine, MLBPlayer, MLBRosterEntry, ValuationSettings
 
 
 LEADERBOARD_CSV = Path(settings.BASE_DIR) / 'data' / 'bp_export_20260312.csv'
@@ -105,6 +105,10 @@ def _team_players_url(team_code):
     return f'/api/teams/{team_code}/players/'
 
 
+def _roster_team_url(team_code):
+    return f'/api/rosters/{team_code}/'
+
+
 def _serialize_stat_player(stat_line):
     row = stat_line.raw_stats or {}
     view = stat_line.stat_view
@@ -148,6 +152,61 @@ def _serialize_stat_player(stat_line):
 
     base['detail_url'] = _player_detail_url(base['team'], base['player_id'])
     return base
+
+
+def _available_roster_seasons():
+    seasons = list(
+        MLBRosterEntry.objects
+        .values_list('season', flat=True)
+        .distinct()
+        .order_by('-season')
+    )
+    return seasons
+
+
+def _resolve_roster_season(raw_season):
+    seasons = _available_roster_seasons()
+    if not seasons:
+        return None
+
+    requested = _to_int(raw_season, 0)
+    if requested in seasons:
+        return requested
+    return seasons[0]
+
+
+def _filter_roster_entries(season, team_code=None):
+    qs = MLBRosterEntry.objects.all()
+    if season is not None:
+        qs = qs.filter(season=season)
+    if team_code:
+        qs = qs.filter(team_abbreviation__iexact=team_code)
+    return qs
+
+
+def _serialize_roster_entry(entry):
+    return {
+        'season': entry.season,
+        'team_id': entry.team_id,
+        'team_name': entry.team_name,
+        'team_abbreviation': entry.team_abbreviation,
+        'league_name': entry.league_name,
+        'division_name': entry.division_name,
+        'player_id': entry.player_id,
+        'player_name': entry.player_name,
+        'player_link': entry.player_link,
+        'jersey_number': entry.jersey_number,
+        'position': {
+            'code': entry.position_code,
+            'name': entry.position_name,
+            'type': entry.position_type,
+            'abbreviation': entry.position_abbreviation,
+        },
+        'status': {
+            'code': entry.status_code,
+            'description': entry.status_description,
+        },
+    }
 
 
 def _ohtani_image_response():
@@ -238,6 +297,55 @@ def api_team_player_detail(request, team_code, player_id):
         'view': view,
         'team': team_code.upper(),
         'player': _serialize_stat_player(target_line),
+    })
+
+
+def api_rosters(request):
+    season = _resolve_roster_season(request.GET.get('season'))
+    filtered_entries = _filter_roster_entries(season)
+    team_rows = list(
+        filtered_entries
+        .values('team_abbreviation', 'team_name')
+        .annotate(player_count=Count('id'))
+        .order_by('team_abbreviation')
+    )
+    teams = [
+        {
+            'code': row['team_abbreviation'],
+            'name': row['team_name'],
+            'season': season,
+            'player_count': row['player_count'],
+            'roster_url': _roster_team_url(row['team_abbreviation']),
+        }
+        for row in team_rows
+    ]
+
+    return JsonResponse({
+        'season': season,
+        'count': len(teams),
+        'teams': teams,
+    })
+
+
+def api_team_roster(request, team_code):
+    season = _resolve_roster_season(request.GET.get('season'))
+    filtered_entries = _filter_roster_entries(season, team_code=team_code)
+
+    if not filtered_entries.exists():
+        return JsonResponse({'message': f'Team {team_code} was not found for season {season}.'}, status=404)
+
+    team_name = filtered_entries.values_list('team_name', flat=True).first()
+    players = [
+        _serialize_roster_entry(entry)
+        for entry in filtered_entries.order_by('player_name', 'player_id')
+    ]
+
+    return JsonResponse({
+        'season': season,
+        'team': team_code.upper(),
+        'team_name': team_name,
+        'count': len(players),
+        'players': players,
     })
 
 

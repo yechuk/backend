@@ -233,7 +233,7 @@ sequenceDiagram
 
 4. **모델 학습 결과의 서비스 연결** — 성과 모델과 시장 모델은 오프라인에서 학습·검증을 거친 뒤 아티팩트로 저장되고, 온라인 추론 계층은 이를 사용해 상세 페이지 요청 시 `predicted_war`, `predicted_value`, `predicted_aav`를 계산한다. 최종적으로 선수 상세 페이지에서는 성과 모델 결과와 시장 모델 결과를 함께 보여 주어 성과 전망과 시장 평가를 동시에 해석할 수 있도록 한다.
 
-5. **프런트엔드 연동 방식** — 프런트엔드는 Heroku Postgres에 직접 연결하지 않고, Heroku에 배포된 Django 앱의 HTTP API를 사용한다. 따라서 다른 프런트엔드 개발자에게 전달해야 하는 값은 `DATABASE_URL`이 아니라 `https://<heroku-app>.herokuapp.com` 형태의 API base URL이다.
+5. **프런트엔드 연동 방식** — 프런트엔드는 Heroku Postgres에 직접 연결하지 않고, Heroku에 배포된 Django 앱의 HTTP API를 사용한다. 따라서 다른 프런트엔드 개발자에게 전달해야 하는 값은 `DATABASE_URL`이 아니라 실제 서비스 API base URL인 `https://yechuk-65fc9b24a5dd.herokuapp.com` 이다.
 
 ## 5. 선수 예측 및 가치 판단 설계
 
@@ -550,8 +550,10 @@ flowchart LR
 
 - **프런트엔드 연동**
   - 프런트엔드 개발자에게는 Heroku Postgres 접속 문자열이 아니라, Heroku에 배포된 Django 앱의 API base URL을 전달한다.
-  - 예: `https://<app-name>.herokuapp.com`
+  - 현재 전달할 실제 base URL: `https://yechuk-65fc9b24a5dd.herokuapp.com`
+  - 프런트엔드 환경변수 예시: `VITE_API_BASE_URL=https://yechuk-65fc9b24a5dd.herokuapp.com`
   - 현재 API 진입점 예시: `/api/players/`, `/api/teams/`, `/api/teams/<team_code>/players/`
+  - 전체 예시: `https://yechuk-65fc9b24a5dd.herokuapp.com/api/players/`, `https://yechuk-65fc9b24a5dd.herokuapp.com/api/teams/`
   - CORS는 `/api/` 경로 기준으로 처리하며, 운영 시 `CORS_ALLOWED_ORIGINS`에 실제 프런트엔드 도메인을 반영한다.
 
 - **마이그레이션 운영**
