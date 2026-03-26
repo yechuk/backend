@@ -110,6 +110,39 @@ class MLBApiStatLine(models.Model):
         return f'{self.stat_view} {self.season} {self.player_name} ({self.team})'
 
 
+class MLBRosterEntry(models.Model):
+    """Season roster snapshot imported from MLB StatsAPI."""
+
+    season = models.PositiveIntegerField(db_index=True)
+    team_id = models.PositiveIntegerField(db_index=True)
+    team_name = models.CharField(max_length=100)
+    team_abbreviation = models.CharField(max_length=10, db_index=True)
+    league_name = models.CharField(max_length=100, blank=True)
+    division_name = models.CharField(max_length=100, blank=True)
+    player_id = models.PositiveIntegerField(db_index=True)
+    player_name = models.CharField(max_length=100)
+    player_link = models.CharField(max_length=100, blank=True)
+    jersey_number = models.CharField(max_length=10, blank=True)
+    position_code = models.CharField(max_length=10, blank=True)
+    position_name = models.CharField(max_length=50, blank=True)
+    position_type = models.CharField(max_length=50, blank=True)
+    position_abbreviation = models.CharField(max_length=10, blank=True)
+    status_code = models.CharField(max_length=10, blank=True)
+    status_description = models.CharField(max_length=50, blank=True)
+    raw_data = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-season', 'team_abbreviation', 'player_name']
+        unique_together = ['season', 'team_id', 'player_id']
+        verbose_name = 'MLB Roster Entry'
+        verbose_name_plural = 'MLB Roster Entries'
+
+    def __str__(self):
+        return f'{self.season} {self.team_abbreviation} {self.player_name}'
+
+
 class MLBPlayerPrediction(models.Model):
     """선수 예측 데이터 (미래 성적, 적정 가치)"""
 

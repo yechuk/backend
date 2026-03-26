@@ -13,6 +13,28 @@ python manage.py runserver
 
 Visit http://127.0.0.1:8000/
 
+## Fetch MLB Rosters
+
+Download 2022 MLB rosters from StatsAPI and save them to `data/` as CSV/JSON:
+
+```bash
+python scripts/fetch_mlb_rosters.py --season 2022 --format both
+```
+
+Load the saved roster snapshot into the configured Django database:
+
+```bash
+python manage.py migrate
+python manage.py load_mlb_rosters --season 2022 --replace-season
+```
+
+On Heroku, the same import can be run against Heroku Postgres with:
+
+```bash
+heroku run python manage.py migrate
+heroku run python manage.py load_mlb_rosters --season 2022 --replace-season --from-api
+```
+
 ## LSTM Training
 
 Train the WAR forecasting baseline on the season CSVs in `data/`:

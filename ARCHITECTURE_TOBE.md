@@ -11,6 +11,7 @@
 - **PaaS**: Heroku
 - **Database**: Heroku Postgres (PostgreSQL)
 - **Web**: Django + Gunicorn
+- **Service Interface**: Django HTTP API (`/api/...`) exposed from the Heroku app
 - **Static**: WhiteNoise 또는 외부 스토리지(확장 시 S3 등) 후보
 - **Config**: 환경 변수 기반(`DATABASE_URL`, `SECRET_KEY`, `DEBUG`, etc.)
 
@@ -73,6 +74,7 @@ flowchart LR
         ContractSrc["Contracts<br/>(Sheets)"]
         FGSrc["FanGraphs<br/>fWAR"]
         CPISrc["IMF SDMX<br/>U.S. CPI"]
+        MLBStats["MLB StatsAPI<br/>Teams / Rosters"]
     end
 
     User --> Web
@@ -91,6 +93,7 @@ flowchart LR
     ContractSrc --> Import
     FGSrc --> Import
     CPISrc --> Import
+    MLBStats --> Import
     Import --> Postgres
 
     Postgres --> ETL
@@ -107,9 +110,9 @@ flowchart LR
     Eval --> Artifacts
 ```
 
-이 도식은 플랫폼을 **사용자 인터페이스**, **웹/애플리케이션 계층**, **온라인 추론**, **데이터 저장소**, **운영 모니터링**, **오프라인 학습 파이프라인**, **외부 데이터 소스**의 일곱 영역으로 구분해 보여준다. 사용자는 브라우저를 통해 서비스에 접속하고, Heroku 환경에서 실행되는 Django 기반 `Web / Application Layer`가 요청을 수신하는 진입점 역할을 한다. 이 계층은 선수 검색, 로스터 관리, 계약 정보 저장, 설정 관리, 상세 페이지 구성 같은 애플리케이션 로직을 처리하면서 필요한 데이터를 PostgreSQL에서 읽고 저장한다. 또한 선수 가치 계산이나 예측 결과 조회처럼 모델 실행이 필요한 요청은 `Online Inference` 계층으로 전달한다. 온라인 추론 계층은 DB에 저장된 선수 프로필, 시즌 기록, 계약 정보와 모델 아티팩트 저장소의 학습 완료 모델을 함께 참조하여 `predicted_value`, `predicted_aav` 같은 결과를 계산하고, 이를 다시 웹 계층으로 반환한다. 최종 결과는 상세 페이지나 시뮬레이션 화면에 표시되며, 필요하면 예측 캐시 형태로 DB에 저장될 수 있다. 웹 요청 처리와 추론 과정에서 발생하는 로그, 오류, 처리 상태는 `Monitoring / Logging` 계층으로 전달되어 운영 안정성을 관리한다.
+이 도식은 플랫폼을 **사용자 인터페이스**, **웹/애플리케이션 계층**, **온라인 추론**, **데이터 저장소**, **운영 모니터링**, **오프라인 학습 파이프라인**, **외부 데이터 소스**의 일곱 영역으로 구분해 보여준다. 사용자는 브라우저 또는 별도 프런트엔드 애플리케이션을 통해 서비스에 접속하고, Heroku 환경에서 실행되는 Django 기반 `Web / Application Layer`가 요청을 수신하는 진입점 역할을 한다. 이 계층은 선수 검색, 로스터 관리, 계약 정보 저장, 설정 관리, 상세 페이지 구성 같은 애플리케이션 로직을 처리하면서 필요한 데이터를 PostgreSQL에서 읽고 저장한다. 또한 선수 가치 계산이나 예측 결과 조회처럼 모델 실행이 필요한 요청은 `Online Inference` 계층으로 전달한다. 온라인 추론 계층은 DB에 저장된 선수 프로필, 시즌 기록, 계약 정보와 모델 아티팩트 저장소의 학습 완료 모델을 함께 참조하여 `predicted_value`, `predicted_aav` 같은 결과를 계산하고, 이를 다시 웹 계층으로 반환한다. 최종 결과는 상세 페이지나 시뮬레이션 화면에 표시되며, 필요하면 예측 캐시 형태로 DB에 저장될 수 있다. 웹 요청 처리와 추론 과정에서 발생하는 로그, 오류, 처리 상태는 `Monitoring / Logging` 계층으로 전달되어 운영 안정성을 관리한다.
 
-오프라인 영역은 실시간 사용자 요청과 분리된 배치형 학습 구조를 의미한다. 계약 시트, FanGraphs의 fWAR 데이터, IMF SDMX의 **미국 CPI** 데이터는 먼저 `Import / Normalize` 단계에서 수집되고 형식을 맞춘 뒤 서비스 DB에 적재된다. 이후 `ETL / Feature Engineering` 단계에서 학습용 피처, CPI 보정값, 타깃 변수, 검증용 분할 데이터셋이 만들어진다. 이렇게 준비된 데이터는 `$ / WAR` 선형 모델, 비선형 모델, 성과 예측 모델, 시장가치 예측 모델 학습에 사용되며, 각 결과는 `Evaluate / Validate` 단계에서 성능과 일관성을 검증받는다. 최종 통과한 모델만 아티팩트 저장소에 반영되고, 온라인 추론 계층은 이를 재사용해 실제 서비스 응답을 만든다.
+오프라인 영역은 실시간 사용자 요청과 분리된 배치형 학습 구조를 의미한다. 계약 시트, FanGraphs의 fWAR 데이터, IMF SDMX의 **미국 CPI** 데이터, 그리고 MLB StatsAPI의 팀/로스터 데이터는 먼저 `Import / Normalize` 단계에서 수집되고 형식을 맞춘 뒤 서비스 DB에 적재된다. 현재 구현 기준으로는 `scripts/fetch_mlb_rosters.py`가 시즌 로스터를 CSV/JSON으로 저장할 수 있고, Django management command `python manage.py load_mlb_rosters --season 2022 --replace-season --from-api`가 MLB StatsAPI에서 직접 읽어 `Heroku Postgres`의 로스터 스냅샷 테이블로 적재할 수 있다. 이후 `ETL / Feature Engineering` 단계에서 학습용 피처, CPI 보정값, 타깃 변수, 검증용 분할 데이터셋이 만들어진다. 이렇게 준비된 데이터는 `$ / WAR` 선형 모델, 비선형 모델, 성과 예측 모델, 시장가치 예측 모델 학습에 사용되며, 각 결과는 `Evaluate / Validate` 단계에서 성능과 일관성을 검증받는다. 최종 통과한 모델만 아티팩트 저장소에 반영되고, 온라인 추론 계층은 이를 재사용해 실제 서비스 응답을 만든다.
 
 ### 3.2. 데이터 모델
 
@@ -138,6 +141,14 @@ erDiagram
     MLBPlayer ||--o{ MLBPlayerSeason : "has"
     MLBPlayer ||--o| MLBPlayerPrediction : "has"
     MLBPlayer ||--o{ MLBSimilarPlayer : "similar"
+    MLBRosterEntry {
+        int season
+        int team_id
+        string team_abbreviation
+        int player_id
+        string player_name
+        string status_code
+    }
     MLBPlayer {
         string name
         string team
@@ -157,17 +168,19 @@ erDiagram
     }
 ```
 
-세부 필드 정의(타자/투수 지표, 예측 컬럼)는 `6.4 MLB 데이터 모델`에서 단일 기준으로 관리한다.
+세부 필드 정의(타자/투수 지표, 예측 컬럼)는 `6.4 MLB 데이터 모델`에서 단일 기준으로 관리한다. 운영 DB에는 별도로 `MLBRosterEntry` 시즌 스냅샷 테이블을 두어, MLB StatsAPI에서 수집한 팀별 로스터를 `season + team_id + player_id` 기준으로 upsert한다.
 
 ### 3.3. 요청 흐름
 
 ```mermaid
 sequenceDiagram
     participant M as 관리자
+    participant F as 프런트엔드
     participant W as 웹 앱
     participant DB as DB
     participant GS1 as 계약 구글 시트
     participant GS2 as 연봉 구글 시트
+    participant MLB as MLB StatsAPI
     
     M->>W: 선수와 계약 추가
     W->>DB: 선수 저장
@@ -193,6 +206,17 @@ sequenceDiagram
     W->>DB: 연봉 정규화 후 저장
     DB-->>W: OK
 
+    M->>W: 2022 시즌 로스터 적재 실행
+    W->>MLB: teams / roster API 호출
+    MLB-->>W: 팀/선수 로스터 JSON
+    W->>DB: MLBRosterEntry upsert
+    DB-->>W: OK
+
+    F->>W: /api/teams/, /api/players/ 요청
+    W->>DB: 서비스 데이터 조회
+    DB-->>W: JSON 응답 데이터
+    W-->>F: API JSON 반환
+
     M->>W: 선수 상세 조회
     W->>DB: 선수 프로필, 시즌 기록, 예측값 조회
     DB-->>W: 선수 데이터 + 시즌 기록 + 예측 가치 + 예측 AAV
@@ -201,13 +225,15 @@ sequenceDiagram
 
 ## 4. 데이터 흐름
 
-1. **원천 데이터 수집 및 적재** — `COT's Contracts` 기반 계약 데이터, FanGraphs의 fWAR 및 관련 성적 지표, IMF SDMX API에서 수집한 미국 CPI 시계열을 각각 정규화한 뒤 서비스 DB에 적재한다. 이 단계에서는 원본 값을 보존하면서 계약 데이터, 선수 시즌 데이터, CPI 시계열이 이후 오프라인 학습과 온라인 조회의 공통 기반이 되도록 저장 구조를 맞춘다.
+1. **원천 데이터 수집 및 적재** — `COT's Contracts` 기반 계약 데이터, FanGraphs의 fWAR 및 관련 성적 지표, IMF SDMX API에서 수집한 미국 CPI 시계열, MLB StatsAPI의 팀/로스터 데이터를 각각 정규화한 뒤 서비스 DB에 적재한다. 이 단계에서는 원본 값을 보존하면서 계약 데이터, 선수 시즌 데이터, CPI 시계열, 시즌 로스터 스냅샷이 이후 오프라인 학습과 온라인 조회의 공통 기반이 되도록 저장 구조를 맞춘다.
 
 2. **인플레이션 보정(CPI)** — 서로 다른 시점의 계약 AAV를 동일 기준시점으로 비교하기 위해 CPI 기반 보정을 수행한다. 오프라인 `ETL` 단계에서 `real_aav = nominal_aav x CPI(기준시점) / CPI(계약시점)` 규칙으로 실질 AAV를 산출하며, 원시 계약값(`nominal_aav`)은 보존하고 비교/학습용 표준값(`real_aav`)을 별도로 관리한다.
 
 3. **훈련 데이터셋 구성(ETL)** — 모델 학습 시에는 서비스 DB에 적재된 원천/정규화 데이터를 그대로 바로 사용하기보다, 오프라인 `ETL + 검증` 단계를 거쳐 결측 처리, 스키마 정합성 검증, 시즌 정렬, CPI 기준시점 보정, 타깃 생성, 학습/평가 분할이 반영된 훈련 데이터셋으로 별도 구성한다. 시장 모델용 행은 **새 계약 시점**과 **FA 시장 표본** 규칙으로 한정한다(세부 **5.1.3.1**).
 
 4. **모델 학습 결과의 서비스 연결** — 성과 모델과 시장 모델은 오프라인에서 학습·검증을 거친 뒤 아티팩트로 저장되고, 온라인 추론 계층은 이를 사용해 상세 페이지 요청 시 `predicted_war`, `predicted_value`, `predicted_aav`를 계산한다. 최종적으로 선수 상세 페이지에서는 성과 모델 결과와 시장 모델 결과를 함께 보여 주어 성과 전망과 시장 평가를 동시에 해석할 수 있도록 한다.
+
+5. **프런트엔드 연동 방식** — 프런트엔드는 Heroku Postgres에 직접 연결하지 않고, Heroku에 배포된 Django 앱의 HTTP API를 사용한다. 따라서 다른 프런트엔드 개발자에게 전달해야 하는 값은 `DATABASE_URL`이 아니라 `https://<heroku-app>.herokuapp.com` 형태의 API base URL이다.
 
 ## 5. 선수 예측 및 가치 판단 설계
 
@@ -520,10 +546,21 @@ flowchart LR
 - **DB 연결**
   - 운영: `DATABASE_URL`(Heroku Postgres)가 주 연결 정보가 된다.
   - Django는 `DATABASE_URL`을 파싱해 PostgreSQL로 접속하도록 구성한다(일반적으로 `dj-database-url` 사용).
+  - 이 값은 백엔드 런타임 전용이며, 브라우저/프런트엔드에 직접 전달하지 않는다.
+
+- **프런트엔드 연동**
+  - 프런트엔드 개발자에게는 Heroku Postgres 접속 문자열이 아니라, Heroku에 배포된 Django 앱의 API base URL을 전달한다.
+  - 예: `https://<app-name>.herokuapp.com`
+  - 현재 API 진입점 예시: `/api/players/`, `/api/teams/`, `/api/teams/<team_code>/players/`
+  - CORS는 `/api/` 경로 기준으로 처리하며, 운영 시 `CORS_ALLOWED_ORIGINS`에 실제 프런트엔드 도메인을 반영한다.
 
 - **마이그레이션 운영**
   - 모델 변경(예: `ValuationSettings`)은 운영 DB에 반영되어야 하므로,
   - Heroku 배포 파이프라인에서 `python manage.py migrate`를 **릴리즈 단계**에 포함한다.
+
+- **운영 적재 커맨드**
+  - 시즌 로스터 스냅샷은 `python manage.py load_mlb_rosters --season 2022 --replace-season --from-api` 형태로 Heroku dyno에서 직접 MLB StatsAPI를 호출해 적재한다.
+  - Heroku dyno 파일시스템은 휘발성이므로, 운영 적재는 로컬 CSV 업로드보다 `--from-api` 경로를 우선한다.
 
 - **Static 파일**
   - Heroku dyno 파일시스템은 휘발성이므로, 정적 파일은 `collectstatic` 결과를 애플리케이션 슬러그에 포함시키는 방식으로 제공한다.
@@ -562,9 +599,13 @@ flowchart LR
 
 ### 6.2. 데이터 파이프라인
 
-- **데이터 소스**: `/data` 디렉터리에 업로드되는 파일 (CSV/JSON/XLSX 등) + Lahman Database 파생 파일 + FanGraphs의 WAR/fWAR 및 관련 지표 데이터 + 사용자가 Google Sheets에서 다운로드한 `COT's Contracts` 계약 데이터 + IMF SDMX API의 미국 CPI 응답
-- **수집 방식**: (1) 파일 기반 배치 임포트, (2) FanGraphs의 WAR/fWAR 및 관련 지표는 별도 정규화 적재 파이프라인으로 서비스 DB에 저장, (3) 계약/AAV 데이터는 사용자가 Google Sheets에서 다운로드한 `COT's Contracts` 스프레드시트를 업로드하고 이를 정규화해 서비스 DB에 적재, (4) 미국 CPI 시계열은 IMF SDMX API에서 주기적으로 동기화해 서비스 DB에 캐시, (5) 이후 오프라인 `ETL + 검증` 단계에서 명목 AAV를 기준시점 실질 AAV로 변환한 뒤 훈련 데이터셋과 시장 기준 데이터셋을 생성
-- **구현**: `scripts/import_data.py` — Python 스크립트로 `/data` → 서비스 DB 적재. 훈련 데이터셋 생성은 별도 오프라인 ETL 작업으로 분리한다.
+- **데이터 소스**: `/data` 디렉터리에 업로드되는 파일 (CSV/JSON/XLSX 등) + Lahman Database 파생 파일 + FanGraphs의 WAR/fWAR 및 관련 지표 데이터 + 사용자가 Google Sheets에서 다운로드한 `COT's Contracts` 계약 데이터 + IMF SDMX API의 미국 CPI 응답 + MLB StatsAPI의 시즌 팀/로스터 응답
+- **수집 방식**: (1) 파일 기반 배치 임포트, (2) FanGraphs의 WAR/fWAR 및 관련 지표는 별도 정규화 적재 파이프라인으로 서비스 DB에 저장, (3) 계약/AAV 데이터는 사용자가 Google Sheets에서 다운로드한 `COT's Contracts` 스프레드시트를 업로드하고 이를 정규화해 서비스 DB에 적재, (4) 미국 CPI 시계열은 IMF SDMX API에서 주기적으로 동기화해 서비스 DB에 캐시, (5) MLB 팀/로스터 데이터는 StatsAPI에서 시즌 기준으로 수집해 로스터 스냅샷 테이블에 upsert, (6) 이후 오프라인 `ETL + 검증` 단계에서 명목 AAV를 기준시점 실질 AAV로 변환한 뒤 훈련 데이터셋과 시장 기준 데이터셋을 생성
+- **구현**
+  - `scripts/fetch_mlb_rosters.py` — `https://statsapi.mlb.com/api/v1/teams?sportId=1&season=<year>` 및 `.../teams/<teamId>/roster?season=<year>`를 호출해 `data/mlb_rosters_<season>.json`, `data/mlb_rosters_<season>.csv`를 생성한다.
+  - `python manage.py load_mlb_rosters --season 2022 --replace-season` — 로컬 CSV/JSON을 서비스 DB에 적재한다.
+  - `python manage.py load_mlb_rosters --season 2022 --replace-season --from-api` — 운영 환경에서 MLB StatsAPI를 직접 호출해 Heroku Postgres에 적재한다.
+  - `scripts/import_data.py`는 일반적인 `/data` 적재의 placeholder로 유지하고, 실제 로스터 적재는 별도 management command로 분리한다.
 - **모델 학습 연계**: 서비스 DB에 적재된 원천/정규화 데이터를 기준으로 오프라인 학습 파이프라인이 CPI 기준시점 보정까지 수행한 뒤 훈련 데이터셋과 계약 시장 기준 데이터셋을 생성하며, 세부 기준은 5.9와 6.7.1을 따른다.
 
 ### 6.3. UI 구조
@@ -599,6 +640,30 @@ flowchart LR
 ### 6.4. MLB 데이터 모델
 
 `3.2.2`의 개념 모델을 실제 서비스 컬럼 수준으로 확장한 정의다.
+
+#### 6.4.0. MLBRosterEntry (시즌 로스터 스냅샷)
+
+MLB StatsAPI에서 수집한 시즌별 팀 로스터를 서비스 DB에 저장하는 운영용 스냅샷 테이블이다. 이 테이블은 선수 예측용 장기 시즌 성적 테이블(`MLBPlayerSeason`)과 분리하며, 현재 시즌/특정 시즌의 소속팀, 등번호, 포지션, 상태값을 빠르게 조회하기 위한 목적을 가진다.
+
+| 필드 | 설명 |
+|------|------|
+| season | 시즌 연도 |
+| team_id | MLB StatsAPI 팀 ID |
+| team_name | 팀 전체 이름 |
+| team_abbreviation | 팀 약어 |
+| league_name | 리그명 |
+| division_name | 디비전명 |
+| player_id | MLBAM 기준 선수 ID |
+| player_name | 선수 이름 |
+| player_link | StatsAPI player link |
+| jersey_number | 등번호 |
+| position_code / position_name / position_type / position_abbreviation | 포지션 메타데이터 |
+| status_code / status_description | Active, Released, Traded 등 로스터 상태 |
+| raw_data | 원본 적재 row(JSON) |
+
+- **유니크 키**: `season + team_id + player_id`
+- **적재 방식**: management command에서 `update_or_create` 기반 upsert
+- **주의**: 팀별 로스터 스냅샷이므로, 시즌 중 이적한 선수는 서로 다른 팀 기준으로 여러 행이 존재할 수 있다.
 
 #### 6.4.1. MLBPlayerSeason (시즌별 성적)
 
@@ -890,6 +955,10 @@ PECOTA 같은 다년 예측을 직접 재현하는 것은 범위가 크므로, �
   - 적용 영역: 4 데이터 흐름, 5.2 예측 파이프라인, 5.1.3 계약 데이터, 6.2 데이터 파이프라인, 6.7.6 가치 추정 이중 모델
   - 반영 포인트: 미국 CPI 시계열 수집, 명목 AAV의 기준시점 실질 AAV 환산, 시장 모델 타깃 표준화, 인플레이션 보정 재현성 확보
   - 참고: https://data.imf.org
+
+- **MLB StatsAPI** (팀/선수/로스터 공개 API). https://statsapi.mlb.com/api/
+  - 적용 영역: 3.1 시스템 레이어, 3.3 요청 흐름, 4 데이터 흐름, 5.9.2 Heroku 운영, 6.2 데이터 파이프라인, 6.4.0 MLBRosterEntry
+  - 반영 포인트: `2022` 시즌 팀/로스터 수집, `MLBRosterEntry` 스냅샷 적재, 운영 환경에서 `load_mlb_rosters --from-api` 경로 사용
 
 ### UI·서비스 참고 및 기타
 
