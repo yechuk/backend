@@ -11,6 +11,12 @@ python manage.py load_sample_players   # Load sample MLB data
 python manage.py runserver
 ```
 
+If you want to run model-training scripts locally, install the ML extras too:
+
+```bash
+pip install -r requirements-ml.txt
+```
+
 Visit http://127.0.0.1:8000/
 
 ## Fetch MLB Rosters
