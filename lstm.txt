@@ -1,0 +1,239 @@
+import random
+import numpy as np
+import pandas as pd
+import torch
+import torch.nn as nn
+from torch.utils.data import Dataset, DataLoader
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+
+seed = 42
+random.seed(seed)
+np.random.seed(seed)
+torch.manual_seed(seed)
+torch.cuda.manual_seed_all(seed)
+
+pitching_csv = "/content/drive/MyDrive/pitching2.csv"
+pitching = pd.read_csv(pitching_csv)
+
+pitching_cols = [
+    'HR/9', 'K%', 'BB', 'IP', 'FIP',
+    'GS', 'G', 'Age', 'Age2', 'WAR'
+]
+
+pitching['Season'] = pd.to_numeric(pitching['Season'], errors='coerce')
+
+base_pitching_cols = [
+    'HR/9', 'K%', 'BB', 'IP', 'FIP',
+    'GS', 'G', 'Age', 'WAR'
+]
+
+for col in base_pitching_cols:
+    pitching[col] = pd.to_numeric(pitching[col], errors='coerce')
+
+pitching['Age2'] = pitching['Age'] ** 2
+
+pitching = pitching.sort_values(['player_name_key', 'Season'])
+pitching = pitching.dropna(subset=pitching_cols)
+
+seq_len = 3
+pred_len = 3
+feature_cols = pitching_cols
+
+X_list = []
+y_list = []
+player_list = []
+input_last_season_list = []
+target_start_season_list = []
+
+for player, group in pitching.groupby('player_name_key'):
+    group = group.sort_values('Season')
+
+    values = group[feature_cols].values
+    target = group['WAR'].values
+    seasons = group['Season'].values
+
+    if len(group) < seq_len + pred_len:
+        continue
+
+    for i in range(len(group) - seq_len - pred_len + 1):
+        X = values[i:i + seq_len]
+        y = target[i + seq_len:i + seq_len + pred_len]
+
+        input_last_season = seasons[i + seq_len - 1]
+        target_start_season = seasons[i + seq_len]
+
+        X_list.append(X)
+        y_list.append(y)
+        player_list.append(player)
+        input_last_season_list.append(input_last_season)
+        target_start_season_list.append(target_start_season)
+
+X = np.array(X_list, dtype=np.float32)
+y = np.array(y_list, dtype=np.float32)
+player_list = np.array(player_list)
+input_last_season_list = np.array(input_last_season_list)
+target_start_season_list = np.array(target_start_season_list)
+
+train_idx = input_last_season_list < 2022
+test_idx = (input_last_season_list == 2022) & (target_start_season_list == 2023)
+
+X_train, y_train = X[train_idx], y[train_idx]
+X_test, y_test = X[test_idx], y[test_idx]
+player_test = player_list[test_idx]
+
+print("X_train:", X_train.shape, "y_train:", y_train.shape)
+print("X_test:", X_test.shape, "y_test:", y_test.shape)
+
+scaler = StandardScaler()
+
+N_train, T, F = X_train.shape
+N_test = X_test.shape[0]
+
+X_train_reshaped = X_train.reshape(-1, F)
+X_test_reshaped = X_test.reshape(-1, F)
+
+scaler.fit(X_train_reshaped)
+
+X_train = scaler.transform(X_train_reshaped).reshape(N_train, T, F)
+X_test = scaler.transform(X_test_reshaped).reshape(N_test, T, F)
+
+class BaseballDataset(Dataset):
+    def __init__(self, X, y):
+        self.X = torch.tensor(X, dtype=torch.float32)
+        self.y = torch.tensor(y, dtype=torch.float32)
+
+    def __len__(self):
+        return len(self.X)
+
+    def __getitem__(self, idx):
+        return self.X[idx], self.y[idx]
+
+train_loader = DataLoader(BaseballDataset(X_train, y_train), batch_size=32, shuffle=True)
+test_loader = DataLoader(BaseballDataset(X_test, y_test), batch_size=32, shuffle=False)
+
+class LSTMRegressor(nn.Module):
+    def __init__(self, input_dim, hidden_dim=64, output_dim=3):
+        super().__init__()
+        self.lstm = nn.LSTM(input_dim, hidden_dim, batch_first=True)
+        self.fc = nn.Linear(hidden_dim, output_dim)
+
+    def forward(self, x):
+        _, (hidden, _) = self.lstm(x)
+        x = hidden[-1]
+        x = self.fc(x)
+        return x
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+model = LSTMRegressor(
+    input_dim=X_train.shape[2],
+    hidden_dim=64,
+    output_dim=3
+).to(device)
+
+criterion = nn.MSELoss()
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+
+epochs = 50
+
+for epoch in range(epochs):
+    model.train()
+    total_loss = 0
+
+    for X_batch, y_batch in train_loader:
+        X_batch = X_batch.to(device)
+        y_batch = y_batch.to(device)
+
+        optimizer.zero_grad()
+        pred = model(X_batch)
+        loss = criterion(pred, y_batch)
+
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        optimizer.step()
+
+        total_loss += loss.item()
+
+    print(f"Epoch {epoch + 1}, Loss: {total_loss / len(train_loader):.4f}")
+
+model.eval()
+
+train_preds = []
+train_targets = []
+
+with torch.no_grad():
+    for X_batch, y_batch in train_loader:
+        X_batch = X_batch.to(device)
+        y_batch = y_batch.to(device)
+
+        pred = model(X_batch)
+
+        train_preds.append(pred.cpu().numpy())
+        train_targets.append(y_batch.cpu().numpy())
+
+train_preds = np.concatenate(train_preds, axis=0)
+train_targets = np.concatenate(train_targets, axis=0)
+
+train_mae = mean_absolute_error(train_targets.reshape(-1), train_preds.reshape(-1))
+train_rmse = np.sqrt(mean_squared_error(train_targets.reshape(-1), train_preds.reshape(-1)))
+train_r2 = r2_score(train_targets.reshape(-1), train_preds.reshape(-1))
+
+print("\n===== train 성능 =====")
+print("Train MAE:", train_mae)
+print("Train RMSE:", train_rmse)
+print("Train R2:", train_r2)
+
+preds = []
+targets = []
+
+with torch.no_grad():
+    for X_batch, y_batch in test_loader:
+        X_batch = X_batch.to(device)
+        y_batch = y_batch.to(device)
+
+        pred = model(X_batch)
+
+        preds.append(pred.cpu().numpy())
+        targets.append(y_batch.cpu().numpy())
+
+preds = np.concatenate(preds, axis=0)
+targets = np.concatenate(targets, axis=0)
+
+overall_mae = mean_absolute_error(targets.reshape(-1), preds.reshape(-1))
+overall_rmse = np.sqrt(mean_squared_error(targets.reshape(-1), preds.reshape(-1)))
+overall_r2 = r2_score(targets.reshape(-1), preds.reshape(-1))
+
+print("\n===== test 성능 (3년 평균) =====")
+print("Overall MAE:", overall_mae)
+print("Overall RMSE:", overall_rmse)
+print("Overall R2:", overall_r2)
+
+years = [2023, 2024, 2025]
+
+print("\n===== 연도별 test 성능 =====")
+for i, year in enumerate(years):
+    mae = mean_absolute_error(targets[:, i], preds[:, i])
+    rmse = np.sqrt(mean_squared_error(targets[:, i], preds[:, i]))
+    r2 = r2_score(targets[:, i], preds[:, i])
+
+    print(f"{year} MAE:", mae)
+    print(f"{year} RMSE:", rmse)
+    print(f"{year} R2:", r2)
+
+result_df = pd.DataFrame({
+    "player_name_key": player_test,
+    "pred_2023": preds[:, 0],
+    "real_2023": targets[:, 0],
+    "pred_2024": preds[:, 1],
+    "real_2024": targets[:, 1],
+    "pred_2025": preds[:, 2],
+    "real_2025": targets[:, 2],
+})
+
+result_df["error_2023"] = result_df["pred_2023"] - result_df["real_2023"]
+result_df["error_2024"] = result_df["pred_2024"] - result_df["real_2024"]
+result_df["error_2025"] = result_df["pred_2025"] - result_df["real_2025"]
+
+print("\n===== Prediction Results =====")
+print(result_df.head(20))
