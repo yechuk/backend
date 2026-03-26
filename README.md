@@ -13,6 +13,12 @@ python manage.py runserver
 
 Visit http://127.0.0.1:8000/
 
+If you want to run the training/data-science scripts locally, install the heavier ML dependencies separately:
+
+```bash
+pip install -r requirements-ml.txt
+```
+
 ## Fetch MLB Rosters
 
 Download 2022 MLB rosters from StatsAPI and save them to `data/` as CSV/JSON:
