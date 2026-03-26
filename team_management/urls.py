@@ -21,6 +21,10 @@ from mlb import views as mlb_views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('api/rosters', mlb_views.api_rosters, name='api_rosters_no_slash'),
+    path('api/rosters/', mlb_views.api_rosters, name='api_rosters'),
+    path('api/rosters/<str:team_code>', mlb_views.api_team_roster, name='api_team_roster_no_slash'),
+    path('api/rosters/<str:team_code>/', mlb_views.api_team_roster, name='api_team_roster'),
     path('api/teams', mlb_views.api_teams, name='api_teams_no_slash'),
     path('api/teams/', mlb_views.api_teams, name='api_teams'),
     path('api/teams/<str:team_code>/players', mlb_views.api_team_players, name='api_team_players_no_slash'),

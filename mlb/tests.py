@@ -4,7 +4,7 @@ from tempfile import TemporaryDirectory
 from django.core.management import call_command
 from django.test import TestCase
 
-from .models import MLBApiStatLine
+from .models import MLBApiStatLine, MLBRosterEntry
 
 
 class TeamApiTests(TestCase):
@@ -91,6 +91,85 @@ class TeamApiTests(TestCase):
         self.assertEqual(payload['player']['name'], 'Kyle Gibson')
         self.assertEqual(payload['player']['team'], 'BAL')
         self.assertEqual(payload['player']['stats']['games_started'], 33)
+
+
+class RosterApiTests(TestCase):
+    def setUp(self):
+        MLBRosterEntry.objects.create(
+            season=2022,
+            team_id=144,
+            team_name='Atlanta Braves',
+            team_abbreviation='ATL',
+            league_name='National League',
+            division_name='National League East',
+            player_id=621345,
+            player_name='A.J. Minter',
+            player_link='/api/v1/people/621345',
+            jersey_number='33',
+            position_code='1',
+            position_name='Pitcher',
+            position_type='Pitcher',
+            position_abbreviation='P',
+            status_code='A',
+            status_description='Active',
+            raw_data={},
+        )
+        MLBRosterEntry.objects.create(
+            season=2022,
+            team_id=144,
+            team_name='Atlanta Braves',
+            team_abbreviation='ATL',
+            league_name='National League',
+            division_name='National League East',
+            player_id=621020,
+            player_name='Dansby Swanson',
+            player_link='/api/v1/people/621020',
+            jersey_number='7',
+            position_code='6',
+            position_name='Shortstop',
+            position_type='Infielder',
+            position_abbreviation='SS',
+            status_code='A',
+            status_description='Active',
+            raw_data={},
+        )
+        MLBRosterEntry.objects.create(
+            season=2022,
+            team_id=110,
+            team_name='Baltimore Orioles',
+            team_abbreviation='BAL',
+            league_name='American League',
+            division_name='American League East',
+            player_id=660271,
+            player_name='Adley Rutschman',
+            player_link='/api/v1/people/660271',
+            jersey_number='35',
+            position_code='2',
+            position_name='Catcher',
+            position_type='Catcher',
+            position_abbreviation='C',
+            status_code='A',
+            status_description='Active',
+            raw_data={},
+        )
+
+    def test_roster_list_endpoint_returns_2022_teams(self):
+        response = self.client.get('/api/rosters/?season=2022')
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['season'], 2022)
+        self.assertEqual(payload['count'], 2)
+        self.assertTrue(any(team['code'] == 'ATL' for team in payload['teams']))
+
+    def test_team_roster_endpoint_returns_atlanta_roster(self):
+        response = self.client.get('/api/rosters/ATL/?season=2022')
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['team'], 'ATL')
+        self.assertEqual(payload['count'], 2)
+        self.assertTrue(any(player['player_name'] == 'A.J. Minter' for player in payload['players']))
 
 
 class LoadMockTeamApiDataCommandTests(TestCase):
