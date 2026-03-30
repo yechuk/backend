@@ -143,6 +143,29 @@ class MLBRosterEntry(models.Model):
         return f'{self.season} {self.team_abbreviation} {self.player_name}'
 
 
+class MLBRosterPhoto(models.Model):
+    """Player photo assets loaded from data/<Team Name>/ into the DB."""
+
+    team_name = models.CharField(max_length=100, db_index=True)
+    player_name = models.CharField(max_length=100)
+    normalized_player_name = models.CharField(max_length=120, db_index=True)
+    original_filename = models.CharField(max_length=255)
+    content_type = models.CharField(max_length=100)
+    image_data = models.BinaryField()
+    byte_size = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['team_name', 'player_name']
+        unique_together = ['team_name', 'normalized_player_name']
+        verbose_name = 'MLB Roster Photo'
+        verbose_name_plural = 'MLB Roster Photos'
+
+    def __str__(self):
+        return f'{self.team_name} {self.player_name}'
+
+
 class MLBPlayerPrediction(models.Model):
     """선수 예측 데이터 (미래 성적, 적정 가치)"""
 

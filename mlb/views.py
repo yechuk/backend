@@ -1,14 +1,15 @@
 import csv
 import json
+import unicodedata
 from pathlib import Path
 
 from django.conf import settings
 from django.db.models import Count
-from django.http import FileResponse, Http404, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
 from .forms import ValuationSettingsForm
-from .models import MLBApiStatLine, MLBPlayer, MLBRosterEntry, ValuationSettings
+from .models import MLBApiStatLine, MLBPlayer, MLBRosterEntry, MLBRosterPhoto, ValuationSettings
 
 
 LEADERBOARD_CSV = Path(settings.BASE_DIR) / 'data' / 'bp_export_20260312.csv'
@@ -109,6 +110,13 @@ def _roster_team_url(team_code):
     return f'/api/rosters/{team_code}/'
 
 
+def _roster_player_photo_url(team_code, player_id, season=None):
+    base_url = f'/api/rosters/{team_code}/players/{player_id}/photo/'
+    if season is None:
+        return base_url
+    return f'{base_url}?season={season}'
+
+
 def _serialize_stat_player(stat_line):
     row = stat_line.raw_stats or {}
     view = stat_line.stat_view
@@ -195,6 +203,7 @@ def _serialize_roster_entry(entry):
         'player_id': entry.player_id,
         'player_name': entry.player_name,
         'player_link': entry.player_link,
+        'photo_url': None,
         'jersey_number': entry.jersey_number,
         'position': {
             'code': entry.position_code,
@@ -207,6 +216,24 @@ def _serialize_roster_entry(entry):
             'description': entry.status_description,
         },
     }
+
+
+def _normalize_photo_name(value):
+    normalized = unicodedata.normalize('NFKD', value or '')
+    ascii_only = normalized.encode('ascii', 'ignore').decode('ascii')
+    return ''.join(ch.lower() for ch in ascii_only if ch.isalnum())
+
+
+def _find_roster_photo(team_name, player_name, photo_map=None):
+    normalized_target = _normalize_photo_name(player_name)
+    if not normalized_target:
+        return None
+    if photo_map is not None:
+        return photo_map.get(normalized_target)
+    return MLBRosterPhoto.objects.filter(
+        team_name=team_name,
+        normalized_player_name=normalized_target,
+    ).first()
 
 
 def _ohtani_image_response():
@@ -335,10 +362,26 @@ def api_team_roster(request, team_code):
         return JsonResponse({'message': f'Team {team_code} was not found for season {season}.'}, status=404)
 
     team_name = filtered_entries.values_list('team_name', flat=True).first()
+    roster_entries = list(filtered_entries.order_by('player_name', 'player_id'))
+    normalized_names = [_normalize_photo_name(entry.player_name) for entry in roster_entries]
+    photo_map = {
+        photo.normalized_player_name: photo
+        for photo in MLBRosterPhoto.objects.filter(
+            team_name=team_name,
+            normalized_player_name__in=normalized_names,
+        )
+    }
     players = [
         _serialize_roster_entry(entry)
-        for entry in filtered_entries.order_by('player_name', 'player_id')
+        for entry in roster_entries
     ]
+    for player_payload, entry in zip(players, roster_entries):
+        if _find_roster_photo(entry.team_name, entry.player_name, photo_map=photo_map) is not None:
+            player_payload['photo_url'] = _roster_player_photo_url(
+                entry.team_abbreviation,
+                entry.player_id,
+                season=entry.season,
+            )
 
     return JsonResponse({
         'season': season,
@@ -347,6 +390,21 @@ def api_team_roster(request, team_code):
         'count': len(players),
         'players': players,
     })
+
+
+def api_roster_player_photo(request, team_code, player_id):
+    season = _resolve_roster_season(request.GET.get('season'))
+    entry = _filter_roster_entries(season, team_code=team_code).filter(player_id=player_id).first()
+    if entry is None:
+        raise Http404(f'Player {player_id} was not found for team {team_code} in season {season}.')
+
+    photo = _find_roster_photo(entry.team_name, entry.player_name)
+    if photo is None:
+        raise Http404(f'Photo for {entry.player_name} was not found.')
+
+    response = HttpResponse(bytes(photo.image_data), content_type=photo.content_type or 'application/octet-stream')
+    response['Content-Disposition'] = f'inline; filename="{photo.original_filename}"'
+    return response
 
 
 def _load_bp_rows():

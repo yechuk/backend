@@ -4,7 +4,7 @@ from tempfile import TemporaryDirectory
 from django.core.management import call_command
 from django.test import TestCase
 
-from .models import MLBApiStatLine, MLBRosterEntry
+from .models import MLBApiStatLine, MLBRosterEntry, MLBRosterPhoto
 
 
 class TeamApiTests(TestCase):
@@ -95,6 +95,15 @@ class TeamApiTests(TestCase):
 
 class RosterApiTests(TestCase):
     def setUp(self):
+        MLBRosterPhoto.objects.create(
+            team_name='Atlanta Braves',
+            player_name='A.J. Minter',
+            normalized_player_name='ajminter',
+            original_filename='A.J. Minter.jpeg',
+            content_type='image/jpeg',
+            image_data=b'fake-image-bytes',
+            byte_size=16,
+        )
         MLBRosterEntry.objects.create(
             season=2022,
             team_id=144,
@@ -170,6 +179,26 @@ class RosterApiTests(TestCase):
         self.assertEqual(payload['team'], 'ATL')
         self.assertEqual(payload['count'], 2)
         self.assertTrue(any(player['player_name'] == 'A.J. Minter' for player in payload['players']))
+        players_by_name = {player['player_name']: player for player in payload['players']}
+        self.assertEqual(
+            players_by_name['A.J. Minter']['photo_url'],
+            '/api/rosters/ATL/players/621345/photo/?season=2022',
+        )
+        self.assertIsNone(players_by_name['Dansby Swanson']['photo_url'])
+
+    def test_roster_player_photo_endpoint_returns_image(self):
+        response = self.client.get('/api/rosters/ATL/players/621345/photo/?season=2022')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'image/jpeg')
+        self.assertEqual(response.content, b'fake-image-bytes')
+
+    def test_roster_player_photo_endpoint_returns_404_when_missing(self):
+        MLBRosterPhoto.objects.all().delete()
+
+        response = self.client.get('/api/rosters/ATL/players/621345/photo/?season=2022')
+
+        self.assertEqual(response.status_code, 404)
 
 
 class LoadMockTeamApiDataCommandTests(TestCase):
@@ -189,3 +218,19 @@ class LoadMockTeamApiDataCommandTests(TestCase):
 
         self.assertEqual(MLBApiStatLine.objects.count(), 2)
         self.assertTrue(MLBApiStatLine.objects.filter(stat_view='pitching', external_player_id='10123').exists())
+
+
+class LoadRosterPhotosCommandTests(TestCase):
+    def test_command_loads_photo_rows_into_db(self):
+        with TemporaryDirectory() as temp_dir:
+            data_dir = Path(temp_dir) / 'data' / 'Atlanta Braves'
+            nested_dir = data_dir / 'Atlanta Braves'
+            nested_dir.mkdir(parents=True, exist_ok=True)
+            (nested_dir / 'A.J. Minter.jpeg').write_bytes(b'photo-bytes')
+
+            call_command('load_roster_photos', '--replace', base_dir=str(temp_dir), verbosity=0)
+
+        photo = MLBRosterPhoto.objects.get(team_name='Atlanta Braves', normalized_player_name='ajminter')
+        self.assertEqual(photo.player_name, 'A.J. Minter')
+        self.assertEqual(photo.content_type, 'image/jpeg')
+        self.assertEqual(bytes(photo.image_data), b'photo-bytes')
