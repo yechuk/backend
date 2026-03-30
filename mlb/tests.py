@@ -279,7 +279,6 @@ class RosterApiTests(TestCase):
         self.assertEqual(payload['count'], 2)
         self.assertTrue(any(player['player_name'] == 'A.J. Minter' for player in payload['players']))
         self.assertEqual(payload['stat_seasons'], {'batting': 2022, 'pitching': 2022})
-
         players_by_name = {player['player_name']: player for player in payload['players']}
         self.assertEqual(
             players_by_name['A.J. Minter']['photo_url'],
@@ -333,8 +332,9 @@ class LoadRosterPhotosCommandTests(TestCase):
     def test_command_loads_photo_rows_into_db(self):
         with TemporaryDirectory() as temp_dir:
             data_dir = Path(temp_dir) / 'data' / 'Atlanta Braves'
-            data_dir.mkdir(parents=True, exist_ok=True)
-            (data_dir / 'A.J. Minter.jpeg').write_bytes(b'photo-bytes')
+            nested_dir = data_dir / 'Atlanta Braves'
+            nested_dir.mkdir(parents=True, exist_ok=True)
+            (nested_dir / 'A.J. Minter.jpeg').write_bytes(b'photo-bytes')
 
             call_command('load_roster_photos', '--replace', base_dir=str(temp_dir), verbosity=0)
 

@@ -44,14 +44,18 @@ class Command(BaseCommand):
 
         total_upserts = 0
         for team_dir in sorted(path for path in data_dir.iterdir() if path.is_dir()):
-            for image_path in sorted(team_dir.iterdir()):
-                if not image_path.is_file() or image_path.suffix.lower() not in SUPPORTED_EXTENSIONS:
-                    continue
-
+            seen_player_names = set()
+            image_paths = sorted(
+                path
+                for path in team_dir.rglob('*')
+                if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS
+            )
+            for image_path in image_paths:
                 player_name = image_path.stem.strip()
                 normalized_player_name = _normalize_player_name(player_name)
-                if not normalized_player_name:
+                if not normalized_player_name or normalized_player_name in seen_player_names:
                     continue
+                seen_player_names.add(normalized_player_name)
 
                 content_type, _ = mimetypes.guess_type(image_path.name)
                 image_data = image_path.read_bytes()

@@ -234,7 +234,6 @@ def _serialize_roster_entry(entry):
         },
     }
 
-
 def _serialize_roster_stat_line(stat_line):
     if stat_line is None:
         return None
@@ -265,8 +264,6 @@ def _has_meaningful_roster_stats(stat_payload, view):
             or stats.get('games', 0) > 0
         )
     return True
-
-
 def _normalize_photo_name(value):
     normalized = unicodedata.normalize('NFKD', value or '')
     ascii_only = normalized.encode('ascii', 'ignore').decode('ascii')
@@ -277,10 +274,8 @@ def _find_roster_photo(team_name, player_name, photo_map=None):
     normalized_target = _normalize_photo_name(player_name)
     if not normalized_target:
         return None
-
     if photo_map is not None:
         return photo_map.get(normalized_target)
-
     return MLBRosterPhoto.objects.filter(
         team_name=team_name,
         normalized_player_name=normalized_target,
