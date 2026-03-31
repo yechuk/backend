@@ -171,3 +171,7 @@ if os.environ.get('ENABLE_HTTPS_REDIRECT', 'False').lower() == 'true':
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+LOGIN_URL = 'roster:login'
+LOGIN_REDIRECT_URL = 'roster:player_list'
+LOGOUT_REDIRECT_URL = 'roster:login'

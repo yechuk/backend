@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from django import forms
+from django.contrib.auth import authenticate
 
 from .models import Contract, Player
 
@@ -83,3 +84,41 @@ class PlayerWithContractForm(forms.ModelForm):
                 start_year=self.cleaned_data.get('start_year'),
             )
         return player
+
+
+class LoginForm(forms.Form):
+    username = forms.CharField(label='아이디', max_length=150)
+    email = forms.EmailField(label='이메일')
+    password = forms.CharField(label='비밀번호', widget=forms.PasswordInput)
+
+    error_messages = {
+        'invalid_login': '아이디, 이메일, 비밀번호를 다시 확인해주세요.',
+    }
+
+    def __init__(self, request=None, *args, **kwargs):
+        self.request = request
+        self.user_cache = None
+        super().__init__(*args, **kwargs)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        username = cleaned_data.get('username')
+        email = cleaned_data.get('email')
+        password = cleaned_data.get('password')
+
+        if username and email and password:
+            self.user_cache = authenticate(
+                self.request,
+                username=username,
+                password=password,
+            )
+            if self.user_cache is None or self.user_cache.email != email:
+                raise forms.ValidationError(
+                    self.error_messages['invalid_login'],
+                    code='invalid_login',
+                )
+
+        return cleaned_data
+
+    def get_user(self):
+        return self.user_cache
