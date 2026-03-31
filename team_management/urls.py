@@ -23,6 +23,16 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/rosters', mlb_views.api_rosters, name='api_rosters_no_slash'),
     path('api/rosters/', mlb_views.api_rosters, name='api_rosters'),
+    path(
+        'api/rosters/<str:team_code>/players/<int:player_id>/photo',
+        mlb_views.api_roster_player_photo,
+        name='api_roster_player_photo_no_slash',
+    ),
+    path(
+        'api/rosters/<str:team_code>/players/<int:player_id>/photo/',
+        mlb_views.api_roster_player_photo,
+        name='api_roster_player_photo',
+    ),
     path('api/rosters/<str:team_code>', mlb_views.api_team_roster, name='api_team_roster_no_slash'),
     path('api/rosters/<str:team_code>/', mlb_views.api_team_roster, name='api_team_roster'),
     path('api/teams', mlb_views.api_teams, name='api_teams_no_slash'),

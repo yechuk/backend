@@ -11,6 +11,12 @@ python manage.py load_sample_players   # Load sample MLB data
 python manage.py runserver
 ```
 
+If you want to run model-training scripts locally, install the ML extras too:
+
+```bash
+pip install -r requirements-ml.txt
+```
+
 Visit http://127.0.0.1:8000/
 
 ## Fetch MLB Rosters
@@ -19,6 +25,12 @@ Download 2022 MLB rosters from StatsAPI and save them to `data/` as CSV/JSON:
 
 ```bash
 python scripts/fetch_mlb_rosters.py --season 2022 --format both
+```
+
+Create a separate enriched roster CSV with season/basic and advanced stats from StatsAPI:
+
+```bash
+python scripts/enrich_mlb_rosters_with_stats.py --season 2022
 ```
 
 Load the saved roster snapshot into the configured Django database:

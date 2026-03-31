@@ -2,3 +2,7 @@ __pycache__/
 *.py[cod]
 staticfiles/
 model_artifacts/
+.DS_Store
+data/Atlanta Braves/
+data/Baltimore Orioles/
+data/Chicago Cubs/
