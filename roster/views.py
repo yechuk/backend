@@ -17,7 +17,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
 
-from .forms import ContractForm, LoginForm, PlayerForm, PlayerWithContractForm
+from .forms import ContractForm, LoginForm, PlayerForm, PlayerWithContractForm, SignupForm
 from .models import Contract, Player
 
 
@@ -61,6 +61,22 @@ def login_view(request):
         return redirect('roster:player_list')
 
     return render(request, 'roster/login.html', {'form': form})
+
+
+def signup_view(request):
+    ensure_demo_user()
+
+    if request.user.is_authenticated:
+        return redirect('roster:player_list')
+
+    form = SignupForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        user = form.save()
+        login(request, user)
+        messages.success(request, '회원가입이 완료되었습니다.')
+        return redirect('roster:player_list')
+
+    return render(request, 'roster/signup.html', {'form': form})
 
 
 @login_required
@@ -329,6 +345,31 @@ def api_login(request):
             'message': '로그인되었습니다.',
             'user': _serialize_user(user),
         }
+    )
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+def api_signup(request):
+    ensure_demo_user()
+
+    try:
+        payload = _parse_json_body(request)
+    except ValidationError as exc:
+        return _json_error('Invalid request body.', errors=exc.message_dict)
+
+    form = SignupForm(data=payload)
+    if not form.is_valid():
+        return _json_error('Signup failed.', errors=form.errors, status=400)
+
+    user = form.save()
+    login(request, user)
+    return JsonResponse(
+        {
+            'message': '회원가입이 완료되었습니다.',
+            'user': _serialize_user(user),
+        },
+        status=201,
     )
 
 

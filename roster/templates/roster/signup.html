@@ -1,14 +1,14 @@
 {% extends "roster/base.html" %}
 
-{% block title %}로그인 | 야구팀 매니저{% endblock %}
+{% block title %}회원가입 | 야구팀 매니저{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
     <div class="col-md-6 col-lg-5">
         <div class="card shadow-sm">
             <div class="card-body p-4">
-                <h1 class="h3 mb-3">로그인</h1>
-                <p class="text-muted mb-4">아이디와 비밀번호를 입력해주세요.</p>
+                <h1 class="h3 mb-3">회원가입</h1>
+                <p class="text-muted mb-4">아이디, 이메일, 비밀번호를 입력해 계정을 만드세요.</p>
 
                 <form method="post" novalidate>
                     {% csrf_token %}
@@ -25,10 +25,10 @@
                         <div class="mb-3">
                             <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
                             <input
-                                type="{% if field.name == 'password' %}password{% elif field.name == 'email' %}email{% else %}text{% endif %}"
+                                type="{% if 'password' in field.name %}password{% elif field.name == 'email' %}email{% else %}text{% endif %}"
                                 name="{{ field.html_name }}"
                                 id="{{ field.id_for_label }}"
-                                value="{% if field.name != 'password' %}{{ field.value|default:'' }}{% endif %}"
+                                value="{% if 'password' not in field.name %}{{ field.value|default:'' }}{% endif %}"
                                 class="form-control{% if field.errors %} is-invalid{% endif %}"
                                 required
                             >
@@ -38,16 +38,12 @@
                         </div>
                     {% endfor %}
 
-                    <button type="submit" class="btn btn-dark w-100">로그인</button>
+                    <button type="submit" class="btn btn-dark w-100">회원가입</button>
                 </form>
 
                 <hr class="my-4">
-                <div class="mb-3 text-center">
-                    <a href="{% url 'roster:signup' %}" class="text-decoration-none">회원가입하러 가기</a>
-                </div>
-                <div class="small text-muted">
-                    테스트 로그인 계정: <strong>jaewook8852</strong> / <strong>asd123</strong><br>
-                    테스트 가입 정보: <strong>jaewook8852@naver.com</strong>
+                <div class="text-center">
+                    <a href="{% url 'roster:login' %}" class="text-decoration-none">이미 계정이 있나요? 로그인</a>
                 </div>
             </div>
         </div>

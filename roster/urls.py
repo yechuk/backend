@@ -6,6 +6,7 @@ app_name = 'roster'
 
 urlpatterns = [
     path('api/auth/login/', views.api_login, name='api_login'),
+    path('api/auth/signup/', views.api_signup, name='api_signup'),
     path('api/auth/logout/', views.api_logout, name='api_logout'),
     path('api/auth/me/', views.api_me, name='api_me'),
     path('api/team-image', views.api_team_image, name='api_team_image_no_slash'),
@@ -14,6 +15,7 @@ urlpatterns = [
     path('api/players/<int:pk>/', views.api_player_detail, name='api_player_detail'),
     path('', views.PlayerListView.as_view(), name='player_list'),
     path('login/', views.login_view, name='login'),
+    path('signup/', views.signup_view, name='signup'),
     path('logout/', views.logout_view, name='logout'),
     path('players/add/', views.PlayerCreateView.as_view(), name='player_add'),
     path('players/<int:pk>/', views.PlayerDetailView.as_view(), name='player_detail'),
