@@ -27,6 +27,12 @@ Download 2022 MLB rosters from StatsAPI and save them to `data/` as CSV/JSON:
 python scripts/fetch_mlb_rosters.py --season 2022 --format both
 ```
 
+Create a separate enriched roster CSV with season/basic and advanced stats from StatsAPI:
+
+```bash
+python scripts/enrich_mlb_rosters_with_stats.py --season 2022
+```
+
 Load the saved roster snapshot into the configured Django database:
 
 ```bash
