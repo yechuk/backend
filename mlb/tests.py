@@ -246,7 +246,7 @@ class TeamApiTests(TestCase):
                 },
             )
 
-        response = self.client.get('/api/teams/ATL/players/18655/?view=pitching')
+        response = self.client.get('/api/teams/ATL/players/621345/?view=pitching')
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
@@ -293,7 +293,7 @@ class TeamApiTests(TestCase):
                 },
             )
 
-        response = self.client.get('/api/teams/ATL/players/18655/?season=2021&view=pitching')
+        response = self.client.get('/api/teams/ATL/players/621345/?season=2021&view=pitching')
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
@@ -386,7 +386,7 @@ class TeamApiTests(TestCase):
             },
         )
 
-        response = self.client.get('/api/teams/ATL/players/18655/?season=2022&view=pitching')
+        response = self.client.get('/api/teams/ATL/players/621345/?season=2022&view=pitching')
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
@@ -394,6 +394,30 @@ class TeamApiTests(TestCase):
         self.assertEqual(payload['similar_players'][0]['player_name'], 'Matthew Boyd')
         self.assertEqual(payload['similar_players'][0]['similarity_score'], 48)
         self.assertEqual(payload['similar_players'][0]['teams_detail_url'], '/api/teams/DET/players/571510/?view=pitching')
+
+    def test_team_player_detail_endpoint_rejects_external_player_id_lookup(self):
+        MLBApiStatLine.objects.create(
+            stat_view='pitching',
+            season=2022,
+            team='ATL',
+            player_name='A.J. Minter',
+            name_ascii='A.J. Minter',
+            external_player_id='18655',
+            mlbam_id='621345',
+            age=28,
+            war=2.0,
+            raw_stats={
+                'Season': '2022',
+                'Name': 'A.J. Minter',
+                'Team': 'ATL',
+                'PlayerId': '18655',
+                'MLBAMID': '621345',
+            },
+        )
+
+        response = self.client.get('/api/teams/ATL/players/18655/?season=2022&view=pitching')
+
+        self.assertEqual(response.status_code, 404)
 
 
 class RosterApiTests(TestCase):
@@ -572,7 +596,7 @@ class RosterApiTests(TestCase):
         stat_line.raw_stats['PlayerId'] = '18655'
         stat_line.save(update_fields=['external_player_id', 'raw_stats', 'updated_at'])
 
-        response = self.client.get('/api/rosters/ATL/players/18655/?season=2022')
+        response = self.client.get('/api/rosters/ATL/players/621345/?season=2022')
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
@@ -626,7 +650,7 @@ class RosterApiTests(TestCase):
                 },
             )
 
-        response = self.client.get('/api/rosters/ATL/players/18655/')
+        response = self.client.get('/api/rosters/ATL/players/621345/')
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
@@ -662,7 +686,7 @@ class RosterApiTests(TestCase):
             rank=1,
         )
 
-        response = self.client.get('/api/rosters/ATL/players/18655/?season=2022')
+        response = self.client.get('/api/rosters/ATL/players/621345/?season=2022')
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
@@ -670,6 +694,16 @@ class RosterApiTests(TestCase):
         self.assertEqual(len(payload['similar_players']['pitching']), 1)
         self.assertEqual(payload['similar_players']['pitching'][0]['player_name'], 'Joely Rodríguez')
         self.assertEqual(payload['similar_players']['pitching'][0]['similarity_score'], 51)
+
+    def test_roster_player_detail_endpoint_rejects_external_player_id_lookup(self):
+        stat_line = MLBApiStatLine.objects.get(stat_view='pitching', season=2022, mlbam_id='621345')
+        stat_line.external_player_id = '18655'
+        stat_line.raw_stats['PlayerId'] = '18655'
+        stat_line.save(update_fields=['external_player_id', 'raw_stats', 'updated_at'])
+
+        response = self.client.get('/api/rosters/ATL/players/18655/?season=2022')
+
+        self.assertEqual(response.status_code, 404)
 
 
 class LoadTeamApiStatsCommandTests(TestCase):

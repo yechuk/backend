@@ -335,32 +335,12 @@ def _resolve_roster_entry_by_identifier(team_code, roster_season, raw_player_id)
     filtered_entries = _filter_roster_entries(roster_season, team_code=team_code)
     direct_player_id = _to_int(player_id_text, None)
     if direct_player_id is not None:
-        direct_match = filtered_entries.filter(player_id=direct_player_id).first()
-        if direct_match is not None:
-            return direct_match
-
-    stat_line = (
-        MLBApiStatLine.objects.filter(
-            Q(mlbam_id=player_id_text) | Q(external_player_id=player_id_text)
-        )
-        .order_by('-season', '-war', 'team', 'player_name')
-        .first()
-    )
-    if stat_line is None:
-        return None
-
-    mlbam_id = _to_int(stat_line.mlbam_id, None)
-    if mlbam_id is None:
-        return None
-    return filtered_entries.filter(player_id=mlbam_id).first()
+        return filtered_entries.filter(player_id=direct_player_id).first()
+    return None
 
 
 def _roster_player_stat_identity(entry, requested_player_id):
-    identity_q = Q(mlbam_id=str(entry.player_id))
-    requested_player_id = str(requested_player_id or '').strip()
-    if requested_player_id and requested_player_id != str(entry.player_id):
-        identity_q |= Q(external_player_id=requested_player_id)
-    return identity_q
+    return Q(mlbam_id=str(entry.player_id))
 
 
 def _roster_player_stat_lines_by_season(entry, requested_player_id):
@@ -491,8 +471,6 @@ def _similar_player_queryset(stat_view, *, mlbam_id=None, external_player_id=Non
     filters = Q()
     if mlbam_id:
         filters |= Q(source_mlbam_id=str(mlbam_id))
-    if external_player_id:
-        filters |= Q(source_external_player_id=str(external_player_id))
     normalized_name = _normalize_similar_name(player_name)
     if normalized_name:
         filters |= Q(source_name_ascii=normalized_name)
@@ -508,7 +486,6 @@ def _team_detail_similar_players(view, stat_line):
         for similar_player in _similar_player_queryset(
             view,
             mlbam_id=stat_line.mlbam_id,
-            external_player_id=stat_line.external_player_id,
             player_name=player_name,
         )
     ]
@@ -522,7 +499,6 @@ def _roster_detail_similar_players(entry, requested_player_id):
             for similar_player in _similar_player_queryset(
                 stat_view,
                 mlbam_id=entry.player_id,
-                external_player_id=requested_player_id,
                 player_name=entry.player_name,
             )
         ]
@@ -603,7 +579,7 @@ def api_team_players(request, team_code):
 def api_team_player_detail(request, team_code, player_id):
     view = _normalize_stat_view(request.GET.get('view'))
     requested_season = request.GET.get('season')
-    player_identity = Q(mlbam_id=str(player_id)) | Q(external_player_id=str(player_id))
+    player_identity = Q(mlbam_id=str(player_id))
     if requested_season:
         season = _resolve_stat_season(view, requested_season)
         target_line = _filter_stat_lines(view, season, team_code=team_code).filter(player_identity).first()
