@@ -4,7 +4,7 @@ import unicodedata
 from pathlib import Path
 
 from django.conf import settings
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
@@ -15,6 +15,7 @@ from .models import MLBApiStatLine, MLBPlayer, MLBRosterEntry, MLBRosterPhoto, V
 LEADERBOARD_CSV = Path(settings.BASE_DIR) / 'data' / 'bp_export_20260312.csv'
 LEADERBOARD_PAGE_SIZE = 60
 SUPPORTED_STAT_VIEWS = {'batting', 'pitching'}
+PLAYER_HISTORY_LIMIT = 5
 
 
 def _resolve_leaderboard_player_pk(name, team):
@@ -52,6 +53,14 @@ def _to_optional_rounded_int(value):
         return int(round(float(value)))
     except (TypeError, ValueError):
         return None
+
+
+def _stat_value(row, *keys):
+    for key in keys:
+        value = row.get(key)
+        if value not in (None, ''):
+            return value
+    return None
 
 
 def _format_rate(value):
@@ -151,36 +160,92 @@ def _serialize_stat_player(stat_line):
         'season': stat_line.season,
         'age': stat_line.age,
         'view': view,
+        'position': _stat_value(row, 'Position', 'position'),
+        'height': _stat_value(row, 'Height', 'height'),
+        'weight': _to_int(_stat_value(row, 'Weight', 'weight'), None),
+        'bats': _stat_value(row, 'Bats', 'bats'),
+        'throws': _stat_value(row, 'Throws', 'throws'),
+        'debut_year': _to_int(_stat_value(row, 'DebutYear', 'debut_year'), None),
+        'contract_value': _to_float(_stat_value(row, 'ContractValue', 'contract_value'), None),
     }
 
     if view == 'pitching':
         base['stats'] = {
-            'games': _to_int(row.get('G')),
-            'games_started': _to_int(row.get('GS')),
-            'innings_pitched': _to_float(row.get('IP')),
-            'walks': _to_int(row.get('BB')),
-            'hr_per_9': _to_float(row.get('HR/9')),
-            'strikeout_rate': _to_float(row.get('K%')),
-            'fip': _to_float(row.get('FIP')),
-            'war': stat_line.war if stat_line.war is not None else _to_float(row.get('WAR')),
+            'games': _to_int(_stat_value(row, 'G', 'games'), None),
+            'games_started': _to_int(_stat_value(row, 'GS', 'games_started'), None),
+            'innings_pitched': _to_float(_stat_value(row, 'IP', 'ip'), None),
+            'strikeouts': _to_int(_stat_value(row, 'SO', 'so'), None),
+            'walks': _to_int(_stat_value(row, 'BB', 'bb'), None),
+            'era': _to_float(_stat_value(row, 'ERA', 'era'), None),
+            'fip': _to_float(_stat_value(row, 'FIP', 'fip'), None),
+            'whip': _to_float(_stat_value(row, 'WHIP', 'whip'), None),
+            'k_per_9': _to_float(_stat_value(row, 'K/9', 'k_per_9'), None),
+            'bb_per_9': _to_float(_stat_value(row, 'BB/9', 'bb_per_9'), None),
+            'hr_per_9': _to_float(_stat_value(row, 'HR/9', 'hr_per_9'), None),
+            'strikeout_rate': _to_float(_stat_value(row, 'K%', 'k_pct'), None),
+            'x_era': _to_float(_stat_value(row, 'xERA', 'x_era'), None),
+            'x_fip': _to_float(_stat_value(row, 'xFIP', 'x_fip'), None),
+            'lob_pct': _to_float(_stat_value(row, 'LOB%', 'lob_pct'), None),
+            'babip': _to_float(_stat_value(row, 'BABIP', 'babip'), None),
+            'velocity': _to_float(_stat_value(row, 'velocity', 'Velocity'), None),
+            'war': stat_line.war if stat_line.war is not None else _to_float(_stat_value(row, 'WAR', 'war'), None),
         }
     else:
         base['stats'] = {
-            'games': _to_int(row.get('G')),
-            'plate_appearances': _to_int(row.get('PA')),
-            'home_runs': _to_int(row.get('HR')),
-            'stolen_bases': _to_int(row.get('SB')),
-            'iso': _to_float(row.get('ISO')),
-            'walk_rate': _to_float(row.get('BB%')),
-            'strikeout_rate': _to_float(row.get('K%')),
-            'woba': _to_float(row.get('wOBA')),
-            'wrc_plus': _to_optional_rounded_int(row.get('wRC+')),
-            'babip': _to_float(row.get('BABIP')),
-            'war': stat_line.war if stat_line.war is not None else _to_float(row.get('WAR')),
+            'games': _to_int(_stat_value(row, 'G', 'games'), None),
+            'plate_appearances': _to_int(_stat_value(row, 'PA', 'plate_appearances'), None),
+            'home_runs': _to_int(_stat_value(row, 'HR', 'hr'), None),
+            'rbi': _to_int(_stat_value(row, 'RBI', 'rbi'), None),
+            'avg': _to_float(_stat_value(row, 'AVG', 'avg'), None),
+            'ops': _to_float(_stat_value(row, 'OPS', 'ops'), None),
+            'stolen_bases': _to_int(_stat_value(row, 'SB', 'stolen_bases'), None),
+            'iso': _to_float(_stat_value(row, 'ISO', 'iso'), None),
+            'walk_rate': _to_float(_stat_value(row, 'BB%', 'bb_pct'), None),
+            'strikeout_rate': _to_float(_stat_value(row, 'K%', 'k_pct'), None),
+            'woba': _to_float(_stat_value(row, 'wOBA', 'woba'), None),
+            'wrc_plus': _to_optional_rounded_int(_stat_value(row, 'wRC+', 'wrc_plus')),
+            'babip': _to_float(_stat_value(row, 'BABIP', 'babip'), None),
+            'exit_velocity': _to_float(_stat_value(row, 'ExitVelocity', 'Exit_Velocity', 'exit_velocity'), None),
+            'launch_angle': _to_float(_stat_value(row, 'LaunchAngle', 'Launch_Angle', 'launch_angle'), None),
+            'war': stat_line.war if stat_line.war is not None else _to_float(_stat_value(row, 'WAR', 'war'), None),
         }
 
     base['detail_url'] = _player_detail_url(base['team'], base['player_id'])
     return base
+
+
+def _player_lookup_q(player_id):
+    return Q(external_player_id=str(player_id)) | Q(mlbam_id=str(player_id))
+
+
+def _player_history_queryset(view, stat_line):
+    return (
+        _stat_queryset(view)
+        .filter(_player_lookup_q(stat_line.external_player_id) | _player_lookup_q(stat_line.mlbam_id))
+        .exclude(team='')
+        .order_by('-season', '-war', 'team', 'player_name')
+    )
+
+
+def _resolve_stat_player_photo_url(stat_line):
+    try:
+        mlbam_id = int(str(stat_line.mlbam_id).strip())
+    except (TypeError, ValueError):
+        return None
+
+    roster_entry = MLBRosterEntry.objects.filter(player_id=mlbam_id).order_by('-season').first()
+    if roster_entry is None:
+        return None
+
+    photo = _find_roster_photo(roster_entry.team_name, roster_entry.player_name)
+    if photo is None:
+        return None
+
+    return _roster_player_photo_url(
+        roster_entry.team_abbreviation,
+        roster_entry.player_id,
+        season=roster_entry.season,
+    )
 
 
 def _available_roster_seasons():
@@ -256,7 +321,16 @@ def _has_meaningful_roster_stats(stat_payload, view):
 
     stats = stat_payload.get('stats') or {}
     if view == MLBApiStatLine.VIEW_BATTING:
-        return stats.get('plate_appearances', 0) > 0
+        return (
+            (stats.get('plate_appearances') or 0) > 0
+            or (stats.get('games') or 0) > 0
+            or (stats.get('home_runs') or 0) > 0
+            or (stats.get('rbi') or 0) > 0
+            or stats.get('avg') is not None
+            or stats.get('ops') is not None
+            or stats.get('wrc_plus') is not None
+            or stats.get('war') is not None
+        )
     if view == MLBApiStatLine.VIEW_PITCHING:
         return (
             stats.get('innings_pitched', 0) > 0
@@ -359,7 +433,7 @@ def api_team_player_detail(request, team_code, player_id):
     view = _normalize_stat_view(request.GET.get('view'))
     season = _resolve_stat_season(view, request.GET.get('season'))
     target_line = _filter_stat_lines(view, season, team_code=team_code).filter(
-        external_player_id=str(player_id)
+        _player_lookup_q(player_id)
     ).first()
     if target_line is None:
         return JsonResponse(
@@ -367,11 +441,20 @@ def api_team_player_detail(request, team_code, player_id):
             status=404,
         )
 
+    player_payload = _serialize_stat_player(target_line)
+    player_payload['photo_url'] = _resolve_stat_player_photo_url(target_line)
+    history = [
+        _serialize_stat_player(stat_line)
+        for stat_line in _player_history_queryset(view, target_line)[:PLAYER_HISTORY_LIMIT]
+    ]
+
     return JsonResponse({
         'season': season,
         'view': view,
         'team': team_code.upper(),
-        'player': _serialize_stat_player(target_line),
+        'player': player_payload,
+        'history_count': len(history),
+        'history': history,
     })
 
 

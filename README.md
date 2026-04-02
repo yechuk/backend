@@ -53,6 +53,13 @@ heroku run python manage.py migrate
 heroku run python manage.py load_mlb_rosters --season 2022 --replace-season --from-api
 ```
 
+Load the local historical player stat CSVs into the same database that powers `/api/teams/`:
+
+```bash
+python manage.py load_team_api_stats --replace --batting-file data/batters_2018_2022.csv --pitching-file data/pitchers_2018_2022.csv
+heroku run python manage.py load_team_api_stats --replace --batting-file data/batters_2018_2022.csv --pitching-file data/pitchers_2018_2022.csv
+```
+
 ## LSTM Training
 
 Train the WAR forecasting baseline on the season CSVs in `data/`:
@@ -98,7 +105,7 @@ heroku run python manage.py loaddata data.json -a <app-name>
 For API seed data managed from files, you can also reload directly in Heroku:
 
 ```bash
-heroku run python manage.py load_mock_team_api_data --replace -a <app-name>
+heroku run python manage.py load_team_api_stats --replace -a <app-name>
 heroku run python manage.py load_roster_photos --replace -a <app-name>
 ```
 ## Features
