@@ -431,10 +431,20 @@ def api_team_players(request, team_code):
 
 def api_team_player_detail(request, team_code, player_id):
     view = _normalize_stat_view(request.GET.get('view'))
-    season = _resolve_stat_season(view, request.GET.get('season'))
-    target_line = _filter_stat_lines(view, season, team_code=team_code).filter(
-        _player_lookup_q(player_id)
-    ).first()
+    requested_season = request.GET.get('season')
+    if requested_season:
+        season = _resolve_stat_season(view, requested_season)
+        target_line = _filter_stat_lines(view, season, team_code=team_code).filter(
+            _player_lookup_q(player_id)
+        ).first()
+    else:
+        target_line = (
+            _filter_stat_lines(view, None, team_code=team_code)
+            .filter(_player_lookup_q(player_id))
+            .order_by('-season', '-war', 'player_name')
+            .first()
+        )
+        season = target_line.season if target_line is not None else _resolve_stat_season(view, None)
     if target_line is None:
         return JsonResponse(
             {'message': f'Player {player_id} was not found for team {team_code} in season {season}.'},
@@ -443,10 +453,13 @@ def api_team_player_detail(request, team_code, player_id):
 
     player_payload = _serialize_stat_player(target_line)
     player_payload['photo_url'] = _resolve_stat_player_photo_url(target_line)
-    history = [
-        _serialize_stat_player(stat_line)
-        for stat_line in _player_history_queryset(view, target_line)[:PLAYER_HISTORY_LIMIT]
-    ]
+    if requested_season:
+        history = [player_payload]
+    else:
+        history = [
+            _serialize_stat_player(stat_line)
+            for stat_line in _player_history_queryset(view, target_line)[:PLAYER_HISTORY_LIMIT]
+        ]
 
     return JsonResponse({
         'season': season,

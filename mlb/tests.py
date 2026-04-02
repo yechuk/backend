@@ -245,7 +245,7 @@ class TeamApiTests(TestCase):
                 },
             )
 
-        response = self.client.get('/api/teams/ATL/players/621345/?season=2022&view=pitching')
+        response = self.client.get('/api/teams/ATL/players/621345/?view=pitching')
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
@@ -260,6 +260,47 @@ class TeamApiTests(TestCase):
         )
         self.assertEqual(payload['history'][0]['height'], '6\' 0"')
         self.assertEqual(payload['history'][0]['bats'], 'L')
+
+    def test_team_player_detail_endpoint_with_season_returns_only_requested_season(self):
+        for season, era, war, team in [
+            (2022, '2.06', '2.0', 'ATL'),
+            (2021, '3.30', '1.2', 'ATL'),
+        ]:
+            MLBApiStatLine.objects.create(
+                stat_view='pitching',
+                season=season,
+                team=team,
+                player_name='A.J. Minter',
+                name_ascii='A.J. Minter',
+                external_player_id='621345',
+                mlbam_id='621345',
+                age=28,
+                war=float(war),
+                raw_stats={
+                    'Season': str(season),
+                    'Name': 'A.J. Minter',
+                    'Team': team,
+                    'Position': 'P',
+                    'Height': '6\' 0"',
+                    'Weight': '215',
+                    'Bats': 'L',
+                    'Throws': 'L',
+                    'ERA': era,
+                    'WAR': war,
+                    'PlayerId': '621345',
+                    'MLBAMID': '621345',
+                },
+            )
+
+        response = self.client.get('/api/teams/ATL/players/621345/?season=2021&view=pitching')
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['season'], 2021)
+        self.assertEqual(payload['player']['season'], 2021)
+        self.assertEqual(payload['history_count'], 1)
+        self.assertEqual(len(payload['history']), 1)
+        self.assertEqual(payload['history'][0]['season'], 2021)
 
     def test_team_player_detail_endpoint_supports_enriched_batting_fields(self):
         MLBApiStatLine.objects.create(
