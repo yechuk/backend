@@ -42,12 +42,17 @@ class Command(BaseCommand):
             deleted_count, _ = MLBApiSimilarPlayer.objects.all().delete()
             self.stdout.write(f'Deleted {deleted_count} existing similar-player rows.')
 
+        stat_line_lookups = {
+            stat_view: self._build_stat_line_lookup(stat_view)
+            for stat_view in self.CSV_MAP
+        }
+
         objects = []
         for stat_view, filename in self.CSV_MAP.items():
             csv_path = data_dir / filename
             if not csv_path.exists():
                 raise CommandError(f'Similar-player CSV not found: {csv_path}')
-            objects.extend(self._load_csv(csv_path, stat_view))
+            objects.extend(self._load_csv(csv_path, stat_view, stat_line_lookups[stat_view]))
 
         with transaction.atomic():
             if objects:
@@ -72,7 +77,7 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(f'Loaded or updated {len(objects)} similar-player rows.'))
 
-    def _load_csv(self, path, stat_view):
+    def _load_csv(self, path, stat_view, stat_line_lookup):
         with path.open('r', encoding='utf-8-sig', newline='') as handle:
             reader = csv.DictReader(handle)
             objects = []
@@ -81,7 +86,7 @@ class Command(BaseCommand):
                 if not source_name:
                     continue
 
-                source_line = self._resolve_stat_line(stat_view, source_name)
+                source_line = stat_line_lookup.get(_normalize_name(source_name))
                 source_ascii = _normalize_name(source_name)
                 for rank in (1, 2, 3):
                     similar_name = (row.get(f'rank_{rank}_name') or '').strip()
@@ -89,7 +94,7 @@ class Command(BaseCommand):
                     if not similar_name or not score_text:
                         continue
 
-                    similar_line = self._resolve_stat_line(stat_view, similar_name)
+                    similar_line = stat_line_lookup.get(_normalize_name(similar_name))
                     objects.append(
                         MLBApiSimilarPlayer(
                             stat_view=stat_view,
@@ -108,18 +113,15 @@ class Command(BaseCommand):
                     )
         return objects
 
-    def _resolve_stat_line(self, stat_view, player_name):
-        normalized_name = _normalize_name(player_name)
-        if not normalized_name:
-            return None
-
-        candidates = list(
+    def _build_stat_line_lookup(self, stat_view):
+        lookup = {}
+        for stat_line in (
             MLBApiStatLine.objects.filter(stat_view=stat_view)
             .exclude(team='')
             .order_by('-season', '-war', 'team', 'player_name')
-        )
-        for stat_line in candidates:
+        ):
             candidate_name = stat_line.name_ascii or stat_line.player_name
-            if _normalize_name(candidate_name) == normalized_name:
-                return stat_line
-        return None
+            normalized_name = _normalize_name(candidate_name)
+            if normalized_name and normalized_name not in lookup:
+                lookup[normalized_name] = stat_line
+        return lookup
