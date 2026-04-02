@@ -81,15 +81,16 @@ class TeamApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload['team'], 'BAL')
-        self.assertTrue(any(player['player_id'] == '10123' for player in payload['players']))
+        self.assertTrue(any(player['player_id'] == '502043' for player in payload['players']))
 
     def test_team_player_detail_endpoint_returns_kyle_gibson(self):
-        response = self.client.get('/api/teams/BAL/players/10123/?season=2023&view=pitching')
+        response = self.client.get('/api/teams/BAL/players/502043/?season=2023&view=pitching')
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload['player']['name'], 'Kyle Gibson')
         self.assertEqual(payload['player']['team'], 'BAL')
+        self.assertEqual(payload['player']['player_id'], '502043')
         self.assertEqual(payload['player']['stats']['games_started'], 33)
 
     def test_team_players_endpoint_rounds_batting_wrc_plus(self):
@@ -129,7 +130,7 @@ class TeamApiTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        adley = next(player for player in payload['players'] if player['player_id'] == '20001')
+        adley = next(player for player in payload['players'] if player['player_id'] == '668939')
         self.assertEqual(adley['stats']['wrc_plus'], 128)
 
     def test_team_player_detail_endpoint_supports_enriched_pitching_fields(self):
@@ -392,7 +393,7 @@ class TeamApiTests(TestCase):
         self.assertEqual(len(payload['similar_players']), 1)
         self.assertEqual(payload['similar_players'][0]['player_name'], 'Matthew Boyd')
         self.assertEqual(payload['similar_players'][0]['similarity_score'], 48)
-        self.assertEqual(payload['similar_players'][0]['teams_detail_url'], '/api/teams/DET/players/15440/?view=pitching')
+        self.assertEqual(payload['similar_players'][0]['teams_detail_url'], '/api/teams/DET/players/571510/?view=pitching')
 
 
 class RosterApiTests(TestCase):
@@ -583,7 +584,8 @@ class RosterApiTests(TestCase):
         self.assertEqual(payload['history'][0]['season'], 2022)
         self.assertIsNone(payload['history'][0]['batting'])
         self.assertEqual(payload['history'][0]['pitching']['mlbam_id'], '621345')
-        self.assertEqual(payload['history'][0]['pitching']['source_player_id'], '18655')
+        self.assertEqual(payload['history'][0]['pitching']['source_player_id'], '621345')
+        self.assertEqual(payload['history'][0]['pitching']['source_external_player_id'], '18655')
         self.assertEqual(payload['history'][0]['pitching']['stats']['games'], 61)
 
     def test_roster_player_detail_endpoint_returns_five_year_history_without_season(self):
@@ -635,7 +637,8 @@ class RosterApiTests(TestCase):
             [2022, 2021, 2020, 2019, 2018],
         )
         self.assertEqual(payload['player']['photo_url'], '/api/rosters/ATL/players/621345/photo/?season=2022')
-        self.assertEqual(payload['player']['pitching']['source_player_id'], '18655')
+        self.assertEqual(payload['player']['pitching']['source_player_id'], '621345')
+        self.assertEqual(payload['player']['pitching']['source_external_player_id'], '18655')
         self.assertEqual(payload['history'][0]['pitching']['stats']['games'], 61)
 
     def test_roster_player_detail_endpoint_includes_similar_players(self):

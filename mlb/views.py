@@ -157,10 +157,12 @@ def _roster_player_detail_url(team_code, player_id, season=None):
 def _serialize_stat_player(stat_line):
     row = stat_line.raw_stats or {}
     view = stat_line.stat_view
+    api_player_id = stat_line.mlbam_id or stat_line.external_player_id
     base = {
-        'id': stat_line.external_player_id,
-        'player_id': stat_line.external_player_id,
+        'id': api_player_id,
+        'player_id': api_player_id,
         'mlbam_id': stat_line.mlbam_id,
+        'external_player_id': stat_line.external_player_id,
         'name': stat_line.player_name,
         'name_ascii': stat_line.name_ascii,
         'team': stat_line.team,
@@ -217,14 +219,19 @@ def _serialize_stat_player(stat_line):
             'war': stat_line.war if stat_line.war is not None else _to_float(_stat_value(row, 'WAR', 'war'), None),
         }
 
-    base['detail_url'] = _player_detail_url(base['team'], base['player_id'])
+    base['detail_url'] = _player_detail_url(base['team'], api_player_id)
     return base
 
 
 def _player_history_queryset(view, stat_line):
+    filters = Q()
+    if stat_line.mlbam_id:
+        filters |= Q(mlbam_id=str(stat_line.mlbam_id))
+    if stat_line.external_player_id:
+        filters |= Q(external_player_id=str(stat_line.external_player_id))
     return (
         _stat_queryset(view)
-        .filter(external_player_id=str(stat_line.external_player_id))
+        .filter(filters)
         .exclude(team='')
         .order_by('-season', '-war', 'team', 'player_name')
     )
@@ -310,6 +317,7 @@ def _serialize_roster_stat_line(stat_line):
     payload = _serialize_stat_player(stat_line)
     return {
         'source_player_id': payload['player_id'],
+        'source_external_player_id': payload['external_player_id'],
         'mlbam_id': stat_line.mlbam_id,
         'team': payload['team'],
         'season': payload['season'],
@@ -457,10 +465,10 @@ def _resolve_roster_detail_url_for_mlbam(mlbam_id):
 
 def _serialize_similar_player(similar_player):
     teams_detail_url = None
-    if similar_player.similar_team and similar_player.similar_external_player_id:
+    if similar_player.similar_team and similar_player.similar_mlbam_id:
         teams_detail_url = (
             f"/api/teams/{similar_player.similar_team}/players/"
-            f"{similar_player.similar_external_player_id}/?view={similar_player.stat_view}"
+            f"{similar_player.similar_mlbam_id}/?view={similar_player.stat_view}"
         )
 
     roster_detail_url = _resolve_roster_detail_url_for_mlbam(similar_player.similar_mlbam_id)
@@ -471,7 +479,8 @@ def _serialize_similar_player(similar_player):
         'similarity_score': similar_player.similarity_score,
         'team': similar_player.similar_team or None,
         'mlbam_id': similar_player.similar_mlbam_id or None,
-        'player_id': similar_player.similar_external_player_id or None,
+        'external_player_id': similar_player.similar_external_player_id or None,
+        'player_id': similar_player.similar_mlbam_id or similar_player.similar_external_player_id or None,
         'view': similar_player.stat_view,
         'teams_detail_url': teams_detail_url,
         'roster_detail_url': roster_detail_url,
@@ -594,15 +603,14 @@ def api_team_players(request, team_code):
 def api_team_player_detail(request, team_code, player_id):
     view = _normalize_stat_view(request.GET.get('view'))
     requested_season = request.GET.get('season')
+    player_identity = Q(mlbam_id=str(player_id)) | Q(external_player_id=str(player_id))
     if requested_season:
         season = _resolve_stat_season(view, requested_season)
-        target_line = _filter_stat_lines(view, season, team_code=team_code).filter(
-            external_player_id=str(player_id)
-        ).first()
+        target_line = _filter_stat_lines(view, season, team_code=team_code).filter(player_identity).first()
     else:
         target_line = (
             _filter_stat_lines(view, None, team_code=team_code)
-            .filter(external_player_id=str(player_id))
+            .filter(player_identity)
             .order_by('-season', '-war', 'player_name')
             .first()
         )
