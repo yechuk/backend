@@ -4,7 +4,7 @@ from tempfile import TemporaryDirectory
 from django.core.management import call_command
 from django.test import TestCase
 
-from .models import MLBApiStatLine, MLBRosterEntry, MLBRosterPhoto
+from .models import MLBApiSimilarPlayer, MLBApiStatLine, MLBRosterEntry, MLBRosterPhoto
 
 
 class TeamApiTests(TestCase):
@@ -351,6 +351,49 @@ class TeamApiTests(TestCase):
         self.assertEqual(payload['player']['stats']['rbi'], 96)
         self.assertEqual(payload['player']['stats']['exit_velocity'], 89.5)
 
+    def test_team_player_detail_endpoint_includes_similar_players(self):
+        MLBApiSimilarPlayer.objects.create(
+            stat_view='pitching',
+            source_player_name='A.J. Minter',
+            source_name_ascii='ajminter',
+            source_mlbam_id='621345',
+            source_external_player_id='18655',
+            similar_player_name='Matthew Boyd',
+            similar_name_ascii='matthewboyd',
+            similar_mlbam_id='571510',
+            similar_external_player_id='15440',
+            similar_team='DET',
+            similarity_score=48,
+            rank=1,
+        )
+        MLBApiStatLine.objects.create(
+            stat_view='pitching',
+            season=2022,
+            team='ATL',
+            player_name='A.J. Minter',
+            name_ascii='A.J. Minter',
+            external_player_id='18655',
+            mlbam_id='621345',
+            age=28,
+            war=2.0,
+            raw_stats={
+                'Season': '2022',
+                'Name': 'A.J. Minter',
+                'Team': 'ATL',
+                'PlayerId': '18655',
+                'MLBAMID': '621345',
+            },
+        )
+
+        response = self.client.get('/api/teams/ATL/players/18655/?season=2022&view=pitching')
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(len(payload['similar_players']), 1)
+        self.assertEqual(payload['similar_players'][0]['player_name'], 'Matthew Boyd')
+        self.assertEqual(payload['similar_players'][0]['similarity_score'], 48)
+        self.assertEqual(payload['similar_players'][0]['teams_detail_url'], '/api/teams/DET/players/15440/?view=pitching')
+
 
 class RosterApiTests(TestCase):
     def setUp(self):
@@ -522,6 +565,109 @@ class RosterApiTests(TestCase):
         response = self.client.get('/api/rosters/ATL/players/621345/photo/?season=2022')
         self.assertEqual(response.status_code, 404)
 
+    def test_roster_player_detail_endpoint_returns_requested_season_stats(self):
+        stat_line = MLBApiStatLine.objects.get(stat_view='pitching', season=2022, mlbam_id='621345')
+        stat_line.external_player_id = '18655'
+        stat_line.raw_stats['PlayerId'] = '18655'
+        stat_line.save(update_fields=['external_player_id', 'raw_stats', 'updated_at'])
+
+        response = self.client.get('/api/rosters/ATL/players/18655/?season=2022')
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['season'], 2022)
+        self.assertEqual(payload['roster_season'], 2022)
+        self.assertEqual(payload['player']['player_id'], 621345)
+        self.assertEqual(payload['player']['player_name'], 'A.J. Minter')
+        self.assertEqual(payload['history_count'], 1)
+        self.assertEqual(payload['history'][0]['season'], 2022)
+        self.assertIsNone(payload['history'][0]['batting'])
+        self.assertEqual(payload['history'][0]['pitching']['mlbam_id'], '621345')
+        self.assertEqual(payload['history'][0]['pitching']['source_player_id'], '18655')
+        self.assertEqual(payload['history'][0]['pitching']['stats']['games'], 61)
+
+    def test_roster_player_detail_endpoint_returns_five_year_history_without_season(self):
+        stat_line = MLBApiStatLine.objects.get(stat_view='pitching', season=2022, mlbam_id='621345')
+        stat_line.external_player_id = '18655'
+        stat_line.raw_stats['PlayerId'] = '18655'
+        stat_line.save(update_fields=['external_player_id', 'raw_stats', 'updated_at'])
+
+        for season, era, war in [
+            (2021, '3.30', '1.2'),
+            (2020, '0.83', '0.8'),
+            (2019, '7.06', '-0.4'),
+            (2018, '3.23', '1.4'),
+        ]:
+            MLBApiStatLine.objects.create(
+                stat_view='pitching',
+                season=season,
+                team='ATL',
+                player_name='A.J. Minter',
+                name_ascii='A.J. Minter',
+                external_player_id='18655',
+                mlbam_id='621345',
+                age=28,
+                war=float(war),
+                raw_stats={
+                    'Season': str(season),
+                    'Name': 'A.J. Minter',
+                    'Team': 'ATL',
+                    'Position': 'P',
+                    'Height': '6\' 0"',
+                    'Weight': '215',
+                    'Bats': 'L',
+                    'Throws': 'L',
+                    'ERA': era,
+                    'WAR': war,
+                    'PlayerId': '18655',
+                    'MLBAMID': '621345',
+                },
+            )
+
+        response = self.client.get('/api/rosters/ATL/players/18655/')
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['roster_season'], 2022)
+        self.assertEqual(payload['history_count'], 5)
+        self.assertEqual(
+            [row['season'] for row in payload['history']],
+            [2022, 2021, 2020, 2019, 2018],
+        )
+        self.assertEqual(payload['player']['photo_url'], '/api/rosters/ATL/players/621345/photo/?season=2022')
+        self.assertEqual(payload['player']['pitching']['source_player_id'], '18655')
+        self.assertEqual(payload['history'][0]['pitching']['stats']['games'], 61)
+
+    def test_roster_player_detail_endpoint_includes_similar_players(self):
+        stat_line = MLBApiStatLine.objects.get(stat_view='pitching', season=2022, mlbam_id='621345')
+        stat_line.external_player_id = '18655'
+        stat_line.raw_stats['PlayerId'] = '18655'
+        stat_line.save(update_fields=['external_player_id', 'raw_stats', 'updated_at'])
+
+        MLBApiSimilarPlayer.objects.create(
+            stat_view='pitching',
+            source_player_name='A.J. Minter',
+            source_name_ascii='ajminter',
+            source_mlbam_id='621345',
+            source_external_player_id='18655',
+            similar_player_name='Joely Rodríguez',
+            similar_name_ascii='joelyrodriguez',
+            similar_mlbam_id='570257',
+            similar_external_player_id='11487',
+            similar_team='NYM',
+            similarity_score=51,
+            rank=1,
+        )
+
+        response = self.client.get('/api/rosters/ATL/players/18655/?season=2022')
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['similar_players']['batting'], [])
+        self.assertEqual(len(payload['similar_players']['pitching']), 1)
+        self.assertEqual(payload['similar_players']['pitching'][0]['player_name'], 'Joely Rodríguez')
+        self.assertEqual(payload['similar_players']['pitching'][0]['similarity_score'], 51)
+
 
 class LoadTeamApiStatsCommandTests(TestCase):
     def test_command_loads_csv_rows_into_db(self):
@@ -583,6 +729,83 @@ class LoadTeamApiStatsCommandTests(TestCase):
         self.assertEqual(batter.raw_stats['PA'], '696')
         self.assertEqual(batter.raw_stats['AVG'], '0.277')
         self.assertEqual(batter.raw_stats['RBI'], '96')
+
+
+class LoadApiSimilarPlayersCommandTests(TestCase):
+    def test_command_loads_similar_csv_rows_into_db(self):
+        with TemporaryDirectory() as temp_dir:
+            data_dir = Path(temp_dir) / 'data'
+            data_dir.mkdir(parents=True, exist_ok=True)
+
+            (data_dir / 'similar_batters_2018_2022.csv').write_text(
+                'name,rank_1_name,rank_1_similarity_score,rank_2_name,rank_2_similarity_score,rank_3_name,rank_3_similarity_score\n'
+                'Dansby Swanson,Francisco Lindor,80,Carlos Correa,78,Trea Turner,75\n',
+                encoding='utf-8',
+            )
+            (data_dir / 'similar_pitchers_2018_2022.csv').write_text(
+                'name,rank_1_name,rank_1_similarity_score,rank_2_name,rank_2_similarity_score,rank_3_name,rank_3_similarity_score\n'
+                'A.J. Minter,Matthew Boyd,48,Joely Rodriguez,46,Daniel Norris,44\n',
+                encoding='utf-8',
+            )
+
+            MLBApiStatLine.objects.create(
+                stat_view='pitching',
+                season=2022,
+                team='ATL',
+                player_name='A.J. Minter',
+                name_ascii='A.J. Minter',
+                external_player_id='18655',
+                mlbam_id='621345',
+                age=28,
+                war=2.0,
+                raw_stats={'PlayerId': '18655', 'MLBAMID': '621345'},
+            )
+            MLBApiStatLine.objects.create(
+                stat_view='pitching',
+                season=2022,
+                team='DET',
+                player_name='Matthew Boyd',
+                name_ascii='Matthew Boyd',
+                external_player_id='15440',
+                mlbam_id='571510',
+                age=31,
+                war=1.4,
+                raw_stats={'PlayerId': '15440', 'MLBAMID': '571510'},
+            )
+            MLBApiStatLine.objects.create(
+                stat_view='batting',
+                season=2022,
+                team='ATL',
+                player_name='Dansby Swanson',
+                name_ascii='Dansby Swanson',
+                external_player_id='621020',
+                mlbam_id='621020',
+                age=28,
+                war=6.4,
+                raw_stats={'PlayerId': '621020', 'MLBAMID': '621020'},
+            )
+            MLBApiStatLine.objects.create(
+                stat_view='batting',
+                season=2022,
+                team='NYM',
+                player_name='Francisco Lindor',
+                name_ascii='Francisco Lindor',
+                external_player_id='12916',
+                mlbam_id='596019',
+                age=28,
+                war=6.8,
+                raw_stats={'PlayerId': '12916', 'MLBAMID': '596019'},
+            )
+
+            call_command('load_api_similar_players', '--replace', base_dir=str(temp_dir), verbosity=0)
+
+        self.assertEqual(MLBApiSimilarPlayer.objects.count(), 6)
+        pitcher_similar = MLBApiSimilarPlayer.objects.get(stat_view='pitching', source_name_ascii='ajminter', rank=1)
+        batter_similar = MLBApiSimilarPlayer.objects.get(stat_view='batting', source_name_ascii='dansbyswanson', rank=1)
+        self.assertEqual(pitcher_similar.source_mlbam_id, '621345')
+        self.assertEqual(pitcher_similar.similar_external_player_id, '15440')
+        self.assertEqual(batter_similar.similar_mlbam_id, '596019')
+        self.assertEqual(batter_similar.similarity_score, 80)
 
 
 class LoadRosterPhotosCommandTests(TestCase):
