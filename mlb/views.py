@@ -47,6 +47,13 @@ def _to_float(value, default=0.0):
         return default
 
 
+def _to_optional_rounded_int(value):
+    try:
+        return int(round(float(value)))
+    except (TypeError, ValueError):
+        return None
+
+
 def _format_rate(value):
     text = f'{value:.3f}'
     if 0 <= value < 1:
@@ -87,6 +94,20 @@ def _resolve_stat_season(view, raw_season):
     if requested in seasons:
         return requested
     return seasons[0]
+
+
+def _resolve_roster_stat_season(view, roster_season):
+    seasons = _available_stat_seasons(view)
+    if not seasons:
+        return None
+
+    if roster_season is None:
+        return seasons[0]
+
+    for season in seasons:
+        if season <= roster_season:
+            return season
+    return None
 
 
 def _filter_stat_lines(view, season, team_code=None):
@@ -153,7 +174,7 @@ def _serialize_stat_player(stat_line):
             'walk_rate': _to_float(row.get('BB%')),
             'strikeout_rate': _to_float(row.get('K%')),
             'woba': _to_float(row.get('wOBA')),
-            'wrc_plus': _to_int(row.get('wRC+')) if row.get('wRC+') else None,
+            'wrc_plus': _to_optional_rounded_int(row.get('wRC+')),
             'babip': _to_float(row.get('BABIP')),
             'war': stat_line.war if stat_line.war is not None else _to_float(row.get('WAR')),
         }
@@ -163,13 +184,9 @@ def _serialize_stat_player(stat_line):
 
 
 def _available_roster_seasons():
-    seasons = list(
-        MLBRosterEntry.objects
-        .values_list('season', flat=True)
-        .distinct()
-        .order_by('-season')
+    return list(
+        MLBRosterEntry.objects.values_list('season', flat=True).distinct().order_by('-season')
     )
-    return seasons
 
 
 def _resolve_roster_season(raw_season):
@@ -216,6 +233,37 @@ def _serialize_roster_entry(entry):
             'description': entry.status_description,
         },
     }
+
+def _serialize_roster_stat_line(stat_line):
+    if stat_line is None:
+        return None
+
+    payload = _serialize_stat_player(stat_line)
+    return {
+        'source_player_id': payload['player_id'],
+        'mlbam_id': stat_line.mlbam_id,
+        'team': payload['team'],
+        'season': payload['season'],
+        'age': payload['age'],
+        'stats': payload['stats'],
+        'detail_url': payload['detail_url'],
+    }
+
+
+def _has_meaningful_roster_stats(stat_payload, view):
+    if stat_payload is None:
+        return False
+
+    stats = stat_payload.get('stats') or {}
+    if view == MLBApiStatLine.VIEW_BATTING:
+        return stats.get('plate_appearances', 0) > 0
+    if view == MLBApiStatLine.VIEW_PITCHING:
+        return (
+            stats.get('innings_pitched', 0) > 0
+            or stats.get('games_started', 0) > 0
+            or stats.get('games', 0) > 0
+        )
+    return True
 
 
 def _normalize_photo_name(value):
@@ -363,30 +411,63 @@ def api_team_roster(request, team_code):
 
     team_name = filtered_entries.values_list('team_name', flat=True).first()
     roster_entries = list(filtered_entries.order_by('player_name', 'player_id'))
-    normalized_names = [_normalize_photo_name(entry.player_name) for entry in roster_entries]
-    photo_map = {
-        photo.normalized_player_name: photo
-        for photo in MLBRosterPhoto.objects.filter(
-            team_name=team_name,
-            normalized_player_name__in=normalized_names,
-        )
-    }
-    players = [
-        _serialize_roster_entry(entry)
-        for entry in roster_entries
-    ]
-    for player_payload, entry in zip(players, roster_entries):
-        if _find_roster_photo(entry.team_name, entry.player_name, photo_map=photo_map) is not None:
-            player_payload['photo_url'] = _roster_player_photo_url(
-                entry.team_abbreviation,
-                entry.player_id,
-                season=entry.season,
+    roster_player_ids = [str(entry.player_id) for entry in roster_entries]
+    photo_map = {}
+    if roster_entries:
+        team_name = roster_entries[0].team_name
+        normalized_names = [_normalize_photo_name(entry.player_name) for entry in roster_entries]
+        photo_map = {
+            photo.normalized_player_name: photo
+            for photo in MLBRosterPhoto.objects.filter(
+                team_name=team_name,
+                normalized_player_name__in=normalized_names,
             )
+        }
+    batting_season = _resolve_roster_stat_season(MLBApiStatLine.VIEW_BATTING, season)
+    pitching_season = _resolve_roster_stat_season(MLBApiStatLine.VIEW_PITCHING, season)
+
+    batting_by_mlbam = {}
+    if batting_season is not None and roster_player_ids:
+        batting_by_mlbam = {
+            stat_line.mlbam_id: stat_line
+            for stat_line in MLBApiStatLine.objects.filter(
+                stat_view=MLBApiStatLine.VIEW_BATTING,
+                season=batting_season,
+                mlbam_id__in=roster_player_ids,
+            )
+        }
+
+    pitching_by_mlbam = {}
+    if pitching_season is not None and roster_player_ids:
+        pitching_by_mlbam = {
+            stat_line.mlbam_id: stat_line
+            for stat_line in MLBApiStatLine.objects.filter(
+                stat_view=MLBApiStatLine.VIEW_PITCHING,
+                season=pitching_season,
+                mlbam_id__in=roster_player_ids,
+            )
+        }
+
+    players = []
+    for entry in roster_entries:
+        player_payload = _serialize_roster_entry(entry)
+        mlbam_id = str(entry.player_id)
+        if _find_roster_photo(entry.team_name, entry.player_name, photo_map=photo_map) is not None:
+            player_payload['photo_url'] = _roster_player_photo_url(entry.team_abbreviation, entry.player_id, season=entry.season)
+        batting_payload = _serialize_roster_stat_line(batting_by_mlbam.get(mlbam_id))
+        pitching_payload = _serialize_roster_stat_line(pitching_by_mlbam.get(mlbam_id))
+        player_payload['batting'] = batting_payload if _has_meaningful_roster_stats(batting_payload, MLBApiStatLine.VIEW_BATTING) else None
+        player_payload['pitching'] = pitching_payload if _has_meaningful_roster_stats(pitching_payload, MLBApiStatLine.VIEW_PITCHING) else None
+        players.append(player_payload)
 
     return JsonResponse({
         'season': season,
         'team': team_code.upper(),
         'team_name': team_name,
+        'stat_seasons': {
+            'batting': batting_season,
+            'pitching': pitching_season,
+        },
         'count': len(players),
         'players': players,
     })

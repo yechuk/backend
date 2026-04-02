@@ -93,7 +93,7 @@ class MLBApiStatLine(models.Model):
     player_name = models.CharField(max_length=100)
     name_ascii = models.CharField(max_length=100, blank=True)
     external_player_id = models.CharField(max_length=32, db_index=True)
-    mlbam_id = models.CharField(max_length=32, blank=True)
+    mlbam_id = models.CharField(max_length=32, blank=True, db_index=True)
     age = models.PositiveIntegerField(null=True, blank=True)
     war = models.FloatField(null=True, blank=True)
     raw_stats = models.JSONField(default=dict, blank=True)
@@ -102,7 +102,7 @@ class MLBApiStatLine(models.Model):
 
     class Meta:
         ordering = ['stat_view', '-season', 'team', 'player_name']
-        unique_together = ['stat_view', 'season', 'team', 'external_player_id']
+        unique_together = ['stat_view', 'season', 'mlbam_id']
         verbose_name = 'MLB API Stat Line'
         verbose_name_plural = 'MLB API Stat Lines'
 

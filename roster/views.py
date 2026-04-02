@@ -2,6 +2,12 @@ import json
 from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
+from django.contrib import messages
+from django.contrib.auth import login
+from django.contrib.auth import logout as auth_logout
+from django.contrib.auth import get_user_model
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
@@ -11,11 +17,76 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
 
-from .forms import ContractForm, PlayerForm, PlayerWithContractForm
+from .forms import ContractForm, LoginForm, PlayerForm, PlayerWithContractForm, SignupForm
 from .models import Contract, Player
 
 
-class PlayerListView(ListView):
+DEMO_USERNAME = 'jaewook8852'
+DEMO_EMAIL = 'jaewook8852@naver.com'
+DEMO_PASSWORD = 'asd123'
+
+
+def ensure_demo_user():
+    user_model = get_user_model()
+    user, created = user_model.objects.get_or_create(
+        username=DEMO_USERNAME,
+        defaults={'email': DEMO_EMAIL},
+    )
+
+    updated_fields = []
+    if user.email != DEMO_EMAIL:
+        user.email = DEMO_EMAIL
+        updated_fields.append('email')
+
+    if created or not user.check_password(DEMO_PASSWORD):
+        user.set_password(DEMO_PASSWORD)
+        updated_fields.append('password')
+
+    if updated_fields:
+        user.save()
+
+    return user
+
+
+def login_view(request):
+    ensure_demo_user()
+
+    if request.user.is_authenticated:
+        return redirect('roster:player_list')
+
+    form = LoginForm(request, data=request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        login(request, form.get_user())
+        messages.success(request, '로그인되었습니다.')
+        return redirect('roster:player_list')
+
+    return render(request, 'roster/login.html', {'form': form})
+
+
+def signup_view(request):
+    ensure_demo_user()
+
+    if request.user.is_authenticated:
+        return redirect('roster:player_list')
+
+    form = SignupForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        user = form.save()
+        login(request, user)
+        messages.success(request, '회원가입이 완료되었습니다.')
+        return redirect('roster:player_list')
+
+    return render(request, 'roster/signup.html', {'form': form})
+
+
+@login_required
+def logout_view(request):
+    auth_logout(request)
+    messages.success(request, '로그아웃되었습니다.')
+    return redirect('roster:login')
+
+
+class PlayerListView(LoginRequiredMixin, ListView):
     model = Player
     context_object_name = 'players'
     template_name = 'roster/player_list.html'
@@ -29,13 +100,13 @@ class PlayerListView(ListView):
         return qs
 
 
-class PlayerDetailView(DetailView):
+class PlayerDetailView(LoginRequiredMixin, DetailView):
     model = Player
     context_object_name = 'player'
     template_name = 'roster/player_detail.html'
 
 
-class PlayerCreateView(CreateView):
+class PlayerCreateView(LoginRequiredMixin, CreateView):
     model = Player
     form_class = PlayerWithContractForm
     template_name = 'roster/player_form.html'
@@ -46,7 +117,7 @@ class PlayerCreateView(CreateView):
         return super().form_valid(form)
 
 
-class PlayerUpdateView(UpdateView):
+class PlayerUpdateView(LoginRequiredMixin, UpdateView):
     model = Player
     form_class = PlayerForm
     context_object_name = 'player'
@@ -56,6 +127,7 @@ class PlayerUpdateView(UpdateView):
         return reverse_lazy('roster:player_detail', kwargs={'pk': self.object.pk})
 
 
+@login_required
 def player_kick_out(request, pk):
     player = get_object_or_404(Player, pk=pk)
     if request.method == 'POST':
@@ -65,6 +137,7 @@ def player_kick_out(request, pk):
     return redirect('roster:player_detail', pk=pk)
 
 
+@login_required
 def contract_edit(request, pk):
     player = get_object_or_404(Player, pk=pk)
     try:
@@ -120,6 +193,15 @@ def _json_error(message, *, status=400, errors=None):
     if errors:
         payload['errors'] = errors
     return JsonResponse(payload, status=status)
+
+
+def _serialize_user(user):
+    return {
+        'id': user.pk,
+        'username': user.username,
+        'email': user.email,
+        'is_authenticated': user.is_authenticated,
+    }
 
 
 def _parse_json_body(request):
@@ -240,6 +322,82 @@ def api_team_image(request):
             return FileResponse(image_path.open('rb'), content_type=content_type)
 
     raise Http404('Ohtani image file not found.')
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+def api_login(request):
+    ensure_demo_user()
+
+    try:
+        payload = _parse_json_body(request)
+    except ValidationError as exc:
+        return _json_error('Invalid request body.', errors=exc.message_dict)
+
+    form = LoginForm(request, data=payload)
+    if not form.is_valid():
+        return _json_error('Login failed.', errors=form.errors, status=400)
+
+    user = form.get_user()
+    login(request, user)
+    return JsonResponse(
+        {
+            'message': '로그인되었습니다.',
+            'user': _serialize_user(user),
+        }
+    )
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+def api_signup(request):
+    ensure_demo_user()
+
+    try:
+        payload = _parse_json_body(request)
+    except ValidationError as exc:
+        return _json_error('Invalid request body.', errors=exc.message_dict)
+
+    form = SignupForm(data=payload)
+    if not form.is_valid():
+        return _json_error('Signup failed.', errors=form.errors, status=400)
+
+    user = form.save()
+    login(request, user)
+    return JsonResponse(
+        {
+            'message': '회원가입이 완료되었습니다.',
+            'user': _serialize_user(user),
+        },
+        status=201,
+    )
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+def api_logout(request):
+    if request.user.is_authenticated:
+        auth_logout(request)
+    return JsonResponse({'message': '로그아웃되었습니다.'})
+
+
+@require_http_methods(['GET'])
+def api_me(request):
+    if not request.user.is_authenticated:
+        return JsonResponse(
+            {
+                'is_authenticated': False,
+                'user': None,
+            },
+            status=401,
+        )
+
+    return JsonResponse(
+        {
+            'is_authenticated': True,
+            'user': _serialize_user(request.user),
+        }
+    )
 
 
 @csrf_exempt

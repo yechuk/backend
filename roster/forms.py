@@ -1,6 +1,8 @@
 from decimal import Decimal
 
 from django import forms
+from django.contrib.auth import authenticate
+from django.contrib.auth import get_user_model
 
 from .models import Contract, Player
 
@@ -83,3 +85,79 @@ class PlayerWithContractForm(forms.ModelForm):
                 start_year=self.cleaned_data.get('start_year'),
             )
         return player
+
+
+class LoginForm(forms.Form):
+    username = forms.CharField(label='아이디', max_length=150)
+    password = forms.CharField(label='비밀번호', widget=forms.PasswordInput)
+
+    error_messages = {
+        'invalid_login': '아이디와 비밀번호를 다시 확인해주세요.',
+    }
+
+    def __init__(self, request=None, *args, **kwargs):
+        self.request = request
+        self.user_cache = None
+        super().__init__(*args, **kwargs)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        username = cleaned_data.get('username')
+        password = cleaned_data.get('password')
+
+        if username and password:
+            self.user_cache = authenticate(
+                self.request,
+                username=username,
+                password=password,
+            )
+            if self.user_cache is None:
+                raise forms.ValidationError(
+                    self.error_messages['invalid_login'],
+                    code='invalid_login',
+                )
+
+        return cleaned_data
+
+    def get_user(self):
+        return self.user_cache
+
+
+class SignupForm(forms.Form):
+    username = forms.CharField(label='아이디', max_length=150)
+    email = forms.EmailField(label='이메일')
+    password = forms.CharField(label='비밀번호', widget=forms.PasswordInput)
+    password_confirm = forms.CharField(label='비밀번호 확인', widget=forms.PasswordInput)
+
+    def clean_username(self):
+        username = self.cleaned_data['username']
+        user_model = get_user_model()
+        if user_model.objects.filter(username=username).exists():
+            raise forms.ValidationError('이미 사용 중인 아이디입니다.')
+        return username
+
+    def clean_email(self):
+        email = self.cleaned_data['email']
+        user_model = get_user_model()
+        if user_model.objects.filter(email=email).exists():
+            raise forms.ValidationError('이미 사용 중인 이메일입니다.')
+        return email
+
+    def clean(self):
+        cleaned_data = super().clean()
+        password = cleaned_data.get('password')
+        password_confirm = cleaned_data.get('password_confirm')
+
+        if password and password_confirm and password != password_confirm:
+            raise forms.ValidationError('비밀번호가 일치하지 않습니다.')
+
+        return cleaned_data
+
+    def save(self):
+        user_model = get_user_model()
+        user = user_model.objects.create_user(
+            username=self.cleaned_data['username'],
+            email=self.cleaned_data['email'],
+            password=self.cleaned_data['password'],
+        )
+        return user

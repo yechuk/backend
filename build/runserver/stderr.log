@@ -1,6 +1,6 @@
-<<<<<<< HEAD
+<<<<<<<<< Temporary merge branch 1
 
 =======
-C:\Users\junho\AppData\Local\Programs\Python\Python312\Lib\site-packages\django\core\handlers\base.py:61: UserWarning: No directory at: C:\Users\junho\Desktop\4ÇÐ³â 1ÇÐ±â\Ä¸½ºÅæ\team_management\staticfiles\
+C:\Users\junho\AppData\Local\Programs\Python\Python312\Lib\site-packages\django\core\handlers\base.py:61: UserWarning: No directory at: C:\Users\junho\Desktop\4ï¿½Ð³ï¿½ 1ï¿½Ð±ï¿½\Ä¸ï¿½ï¿½ï¿½ï¿½\team_management\staticfiles\
   mw_instance = middleware(adapted_handler)
 >>>>>>> develop

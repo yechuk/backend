@@ -38,4 +38,5 @@ class ApiCorsMiddleware:
             'Access-Control-Request-Headers',
             'Content-Type',
         )
+        response['Access-Control-Allow-Credentials'] = 'true'
         response['Access-Control-Max-Age'] = '86400'

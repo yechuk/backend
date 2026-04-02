@@ -1,0 +1,52 @@
+{% extends "roster/base.html" %}
+
+{% block title %}회원가입 | 야구팀 매니저{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+        <div class="card shadow-sm">
+            <div class="card-body p-4">
+                <h1 class="h3 mb-3">회원가입</h1>
+                <p class="text-muted mb-4">아이디, 이메일, 비밀번호를 입력해 계정을 만드세요.</p>
+
+                <form method="post" novalidate>
+                    {% csrf_token %}
+
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger">
+                            {% for error in form.non_field_errors %}
+                                <div>{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+
+                    {% for field in form %}
+                        <div class="mb-3">
+                            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                            <input
+                                type="{% if 'password' in field.name %}password{% elif field.name == 'email' %}email{% else %}text{% endif %}"
+                                name="{{ field.html_name }}"
+                                id="{{ field.id_for_label }}"
+                                value="{% if 'password' not in field.name %}{{ field.value|default:'' }}{% endif %}"
+                                class="form-control{% if field.errors %} is-invalid{% endif %}"
+                                required
+                            >
+                            {% for error in field.errors %}
+                                <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                    {% endfor %}
+
+                    <button type="submit" class="btn btn-dark w-100">회원가입</button>
+                </form>
+
+                <hr class="my-4">
+                <div class="text-center">
+                    <a href="{% url 'roster:login' %}" class="text-decoration-none">이미 계정이 있나요? 로그인</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
