@@ -225,7 +225,7 @@ class TeamApiTests(TestCase):
                 team=team,
                 player_name='A.J. Minter',
                 name_ascii='A.J. Minter',
-                external_player_id='621345',
+                external_player_id='18655',
                 mlbam_id='621345',
                 age=28,
                 war=float(war),
@@ -240,12 +240,12 @@ class TeamApiTests(TestCase):
                     'Throws': 'L',
                     'ERA': era,
                     'WAR': war,
-                    'PlayerId': '621345',
+                    'PlayerId': '18655',
                     'MLBAMID': '621345',
                 },
             )
 
-        response = self.client.get('/api/teams/ATL/players/621345/?view=pitching')
+        response = self.client.get('/api/teams/ATL/players/18655/?view=pitching')
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
@@ -272,7 +272,7 @@ class TeamApiTests(TestCase):
                 team=team,
                 player_name='A.J. Minter',
                 name_ascii='A.J. Minter',
-                external_player_id='621345',
+                external_player_id='18655',
                 mlbam_id='621345',
                 age=28,
                 war=float(war),
@@ -287,12 +287,12 @@ class TeamApiTests(TestCase):
                     'Throws': 'L',
                     'ERA': era,
                     'WAR': war,
-                    'PlayerId': '621345',
+                    'PlayerId': '18655',
                     'MLBAMID': '621345',
                 },
             )
 
-        response = self.client.get('/api/teams/ATL/players/621345/?season=2021&view=pitching')
+        response = self.client.get('/api/teams/ATL/players/18655/?season=2021&view=pitching')
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()

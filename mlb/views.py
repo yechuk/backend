@@ -4,7 +4,7 @@ import unicodedata
 from pathlib import Path
 
 from django.conf import settings
-from django.db.models import Count, Q
+from django.db.models import Count
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
@@ -214,14 +214,10 @@ def _serialize_stat_player(stat_line):
     return base
 
 
-def _player_lookup_q(player_id):
-    return Q(external_player_id=str(player_id)) | Q(mlbam_id=str(player_id))
-
-
 def _player_history_queryset(view, stat_line):
     return (
         _stat_queryset(view)
-        .filter(_player_lookup_q(stat_line.external_player_id) | _player_lookup_q(stat_line.mlbam_id))
+        .filter(external_player_id=str(stat_line.external_player_id))
         .exclude(team='')
         .order_by('-season', '-war', 'team', 'player_name')
     )
@@ -435,12 +431,12 @@ def api_team_player_detail(request, team_code, player_id):
     if requested_season:
         season = _resolve_stat_season(view, requested_season)
         target_line = _filter_stat_lines(view, season, team_code=team_code).filter(
-            _player_lookup_q(player_id)
+            external_player_id=str(player_id)
         ).first()
     else:
         target_line = (
             _filter_stat_lines(view, None, team_code=team_code)
-            .filter(_player_lookup_q(player_id))
+            .filter(external_player_id=str(player_id))
             .order_by('-season', '-war', 'player_name')
             .first()
         )
