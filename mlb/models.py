@@ -194,6 +194,38 @@ class MLBApiSimilarPlayer(models.Model):
         return f'{self.stat_view} {self.source_player_name} -> {self.similar_player_name} ({self.rank})'
 
 
+class MLBApiRecommendedSimilarPlayer(models.Model):
+    """Recommendation-based similar player rows imported from recommendation CSVs."""
+
+    stat_view = models.CharField(max_length=20, choices=MLBApiStatLine.VIEW_CHOICES, db_index=True)
+    source_player_name = models.CharField(max_length=100)
+    source_name_ascii = models.CharField(max_length=100, blank=True, db_index=True)
+    source_mlbam_id = models.CharField(max_length=32, blank=True, db_index=True)
+    source_external_player_id = models.CharField(max_length=32, blank=True, db_index=True)
+    source_player_position = models.CharField(max_length=10, blank=True)
+    source_player_age = models.PositiveSmallIntegerField(null=True, blank=True)
+    similar_player_name = models.CharField(max_length=100)
+    similar_name_ascii = models.CharField(max_length=100, blank=True, db_index=True)
+    similar_mlbam_id = models.CharField(max_length=32, blank=True, db_index=True)
+    similar_external_player_id = models.CharField(max_length=32, blank=True, db_index=True)
+    similar_team = models.CharField(max_length=10, blank=True)
+    similar_player_position = models.CharField(max_length=10, blank=True)
+    similar_player_age = models.PositiveSmallIntegerField(null=True, blank=True)
+    similarity_score = models.DecimalField(max_digits=12, decimal_places=9, default=Decimal('0'))
+    rank = models.PositiveSmallIntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['stat_view', 'source_player_name', 'rank']
+        unique_together = ['stat_view', 'source_name_ascii', 'rank']
+        verbose_name = 'MLB API Recommended Similar Player'
+        verbose_name_plural = 'MLB API Recommended Similar Players'
+
+    def __str__(self):
+        return f'{self.stat_view} {self.source_player_name} -> {self.similar_player_name} ({self.rank})'
+
+
 class MLBPlayerPrediction(models.Model):
     """선수 예측 데이터 (미래 성적, 적정 가치)"""
 

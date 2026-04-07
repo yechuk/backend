@@ -4,7 +4,7 @@ from tempfile import TemporaryDirectory
 from django.core.management import call_command
 from django.test import TestCase
 
-from .models import MLBApiSimilarPlayer, MLBApiStatLine, MLBRosterEntry, MLBRosterPhoto
+from .models import MLBApiRecommendedSimilarPlayer, MLBApiSimilarPlayer, MLBApiStatLine, MLBRosterEntry, MLBRosterPhoto
 
 
 class TeamApiTests(TestCase):
@@ -367,6 +367,24 @@ class TeamApiTests(TestCase):
             similarity_score=48,
             rank=1,
         )
+        MLBApiRecommendedSimilarPlayer.objects.create(
+            stat_view='pitching',
+            source_player_name='A.J. Minter',
+            source_name_ascii='ajminter',
+            source_mlbam_id='621345',
+            source_external_player_id='18655',
+            source_player_position='P',
+            source_player_age=28,
+            similar_player_name='Joely Rodríguez',
+            similar_name_ascii='joelyrodriguez',
+            similar_mlbam_id='570257',
+            similar_external_player_id='11487',
+            similar_team='NYM',
+            similar_player_position='P',
+            similar_player_age=30,
+            similarity_score='0.912345678',
+            rank=1,
+        )
         MLBApiStatLine.objects.create(
             stat_view='pitching',
             season=2022,
@@ -394,6 +412,11 @@ class TeamApiTests(TestCase):
         self.assertEqual(payload['similar_players'][0]['player_name'], 'Matthew Boyd')
         self.assertEqual(payload['similar_players'][0]['similarity_score'], 48)
         self.assertEqual(payload['similar_players'][0]['teams_detail_url'], '/api/teams/DET/players/571510/?view=pitching')
+        self.assertEqual(len(payload['similar_player_recommendations']), 1)
+        self.assertEqual(payload['similar_player_recommendations'][0]['player_name'], 'Joely Rodríguez')
+        self.assertAlmostEqual(payload['similar_player_recommendations'][0]['similarity_score'], 0.912345678)
+        self.assertEqual(payload['similar_player_recommendations'][0]['position'], 'P')
+        self.assertEqual(payload['similar_player_recommendations'][0]['age'], 30)
 
     def test_team_player_detail_endpoint_rejects_external_player_id_lookup(self):
         MLBApiStatLine.objects.create(
@@ -685,6 +708,24 @@ class RosterApiTests(TestCase):
             similarity_score=51,
             rank=1,
         )
+        MLBApiRecommendedSimilarPlayer.objects.create(
+            stat_view='pitching',
+            source_player_name='A.J. Minter',
+            source_name_ascii='ajminter',
+            source_mlbam_id='621345',
+            source_external_player_id='18655',
+            source_player_position='P',
+            source_player_age=28,
+            similar_player_name='Daniel Norris',
+            similar_name_ascii='danielnorris',
+            similar_mlbam_id='596057',
+            similar_external_player_id='14871',
+            similar_team='DET',
+            similar_player_position='P',
+            similar_player_age=29,
+            similarity_score='0.876543210',
+            rank=1,
+        )
 
         response = self.client.get('/api/rosters/ATL/players/621345/?season=2022')
 
@@ -694,6 +735,10 @@ class RosterApiTests(TestCase):
         self.assertEqual(len(payload['similar_players']['pitching']), 1)
         self.assertEqual(payload['similar_players']['pitching'][0]['player_name'], 'Joely Rodríguez')
         self.assertEqual(payload['similar_players']['pitching'][0]['similarity_score'], 51)
+        self.assertEqual(payload['similar_player_recommendations']['batting'], [])
+        self.assertEqual(len(payload['similar_player_recommendations']['pitching']), 1)
+        self.assertEqual(payload['similar_player_recommendations']['pitching'][0]['player_name'], 'Daniel Norris')
+        self.assertAlmostEqual(payload['similar_player_recommendations']['pitching'][0]['similarity_score'], 0.87654321)
 
     def test_roster_player_detail_endpoint_rejects_external_player_id_lookup(self):
         stat_line = MLBApiStatLine.objects.get(stat_view='pitching', season=2022, mlbam_id='621345')
@@ -784,6 +829,16 @@ class LoadApiSimilarPlayersCommandTests(TestCase):
                 'A.J. Minter,Matthew Boyd,48,Joely Rodriguez,46,Daniel Norris,44\n',
                 encoding='utf-8',
             )
+            (data_dir / 'batters_recommendations.csv').write_text(
+                'query_player_id,query_name,query_position,query_age,rec_1_player_id,rec_1_name,rec_1_position,rec_1_age,rec_1_similarity,rec_2_player_id,rec_2_name,rec_2_position,rec_2_age,rec_2_similarity,rec_3_player_id,rec_3_name,rec_3_position,rec_3_age,rec_3_similarity\n'
+                '621020,Dansby Swanson,SS,28,596019,Francisco Lindor,SS,28,0.812345678,622491,Carlos Correa,SS,28,0.801234567,607208,Trea Turner,SS,29,0.792345678\n',
+                encoding='utf-8',
+            )
+            (data_dir / 'pitchers_recommendations.csv').write_text(
+                'query_player_id,query_name,query_position,query_age,rec_1_player_id,rec_1_name,rec_1_position,rec_1_age,rec_1_similarity,rec_2_player_id,rec_2_name,rec_2_position,rec_2_age,rec_2_similarity,rec_3_player_id,rec_3_name,rec_3_position,rec_3_age,rec_3_similarity\n'
+                '621345,A.J. Minter,P,28,571510,Matthew Boyd,P,31,0.956789123,570257,Joely Rodriguez,P,30,0.934567891,596057,Daniel Norris,P,29,0.912345678\n',
+                encoding='utf-8',
+            )
 
             MLBApiStatLine.objects.create(
                 stat_view='pitching',
@@ -810,6 +865,30 @@ class LoadApiSimilarPlayersCommandTests(TestCase):
                 raw_stats={'PlayerId': '15440', 'MLBAMID': '571510'},
             )
             MLBApiStatLine.objects.create(
+                stat_view='pitching',
+                season=2022,
+                team='NYM',
+                player_name='Joely Rodriguez',
+                name_ascii='Joely Rodriguez',
+                external_player_id='11487',
+                mlbam_id='570257',
+                age=30,
+                war=0.8,
+                raw_stats={'PlayerId': '11487', 'MLBAMID': '570257'},
+            )
+            MLBApiStatLine.objects.create(
+                stat_view='pitching',
+                season=2022,
+                team='DET',
+                player_name='Daniel Norris',
+                name_ascii='Daniel Norris',
+                external_player_id='14871',
+                mlbam_id='596057',
+                age=29,
+                war=0.5,
+                raw_stats={'PlayerId': '14871', 'MLBAMID': '596057'},
+            )
+            MLBApiStatLine.objects.create(
                 stat_view='batting',
                 season=2022,
                 team='ATL',
@@ -833,16 +912,57 @@ class LoadApiSimilarPlayersCommandTests(TestCase):
                 war=6.8,
                 raw_stats={'PlayerId': '12916', 'MLBAMID': '596019'},
             )
+            MLBApiStatLine.objects.create(
+                stat_view='batting',
+                season=2022,
+                team='MIN',
+                player_name='Carlos Correa',
+                name_ascii='Carlos Correa',
+                external_player_id='14162',
+                mlbam_id='622491',
+                age=28,
+                war=4.4,
+                raw_stats={'PlayerId': '14162', 'MLBAMID': '622491'},
+            )
+            MLBApiStatLine.objects.create(
+                stat_view='batting',
+                season=2022,
+                team='LAD',
+                player_name='Trea Turner',
+                name_ascii='Trea Turner',
+                external_player_id='16252',
+                mlbam_id='607208',
+                age=29,
+                war=6.3,
+                raw_stats={'PlayerId': '16252', 'MLBAMID': '607208'},
+            )
 
             call_command('load_api_similar_players', '--replace', base_dir=str(temp_dir), verbosity=0)
 
         self.assertEqual(MLBApiSimilarPlayer.objects.count(), 6)
+        self.assertEqual(MLBApiRecommendedSimilarPlayer.objects.count(), 6)
         pitcher_similar = MLBApiSimilarPlayer.objects.get(stat_view='pitching', source_name_ascii='ajminter', rank=1)
         batter_similar = MLBApiSimilarPlayer.objects.get(stat_view='batting', source_name_ascii='dansbyswanson', rank=1)
+        pitcher_recommendation = MLBApiRecommendedSimilarPlayer.objects.get(
+            stat_view='pitching',
+            source_name_ascii='ajminter',
+            rank=1,
+        )
+        batter_recommendation = MLBApiRecommendedSimilarPlayer.objects.get(
+            stat_view='batting',
+            source_name_ascii='dansbyswanson',
+            rank=1,
+        )
         self.assertEqual(pitcher_similar.source_mlbam_id, '621345')
         self.assertEqual(pitcher_similar.similar_external_player_id, '15440')
         self.assertEqual(batter_similar.similar_mlbam_id, '596019')
         self.assertEqual(batter_similar.similarity_score, 80)
+        self.assertEqual(pitcher_recommendation.similar_external_player_id, '15440')
+        self.assertEqual(pitcher_recommendation.similar_player_position, 'P')
+        self.assertEqual(pitcher_recommendation.similar_player_age, 31)
+        self.assertEqual(str(pitcher_recommendation.similarity_score), '0.956789123')
+        self.assertEqual(batter_recommendation.similar_mlbam_id, '596019')
+        self.assertEqual(str(batter_recommendation.similarity_score), '0.812345678')
 
 
 class LoadRosterPhotosCommandTests(TestCase):

@@ -9,7 +9,15 @@ from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
 from .forms import ValuationSettingsForm
-from .models import MLBApiSimilarPlayer, MLBApiStatLine, MLBPlayer, MLBRosterEntry, MLBRosterPhoto, ValuationSettings
+from .models import (
+    MLBApiRecommendedSimilarPlayer,
+    MLBApiSimilarPlayer,
+    MLBApiStatLine,
+    MLBPlayer,
+    MLBRosterEntry,
+    MLBRosterPhoto,
+    ValuationSettings,
+)
 
 
 LEADERBOARD_CSV = Path(settings.BASE_DIR) / 'data' / 'bp_export_20260312.csv'
@@ -467,6 +475,32 @@ def _serialize_similar_player(similar_player):
     }
 
 
+def _serialize_recommended_similar_player(similar_player):
+    teams_detail_url = None
+    if similar_player.similar_team and similar_player.similar_mlbam_id:
+        teams_detail_url = (
+            f"/api/teams/{similar_player.similar_team}/players/"
+            f"{similar_player.similar_mlbam_id}/?view={similar_player.stat_view}"
+        )
+
+    roster_detail_url = _resolve_roster_detail_url_for_mlbam(similar_player.similar_mlbam_id)
+
+    return {
+        'rank': similar_player.rank,
+        'player_name': similar_player.similar_player_name,
+        'similarity_score': float(similar_player.similarity_score),
+        'team': similar_player.similar_team or None,
+        'mlbam_id': similar_player.similar_mlbam_id or None,
+        'external_player_id': similar_player.similar_external_player_id or None,
+        'player_id': similar_player.similar_mlbam_id or similar_player.similar_external_player_id or None,
+        'view': similar_player.stat_view,
+        'position': similar_player.similar_player_position or None,
+        'age': similar_player.similar_player_age,
+        'teams_detail_url': teams_detail_url,
+        'roster_detail_url': roster_detail_url,
+    }
+
+
 def _similar_player_queryset(stat_view, *, mlbam_id=None, external_player_id=None, player_name=None):
     filters = Q()
     if mlbam_id:
@@ -477,6 +511,18 @@ def _similar_player_queryset(stat_view, *, mlbam_id=None, external_player_id=Non
     if not filters:
         return MLBApiSimilarPlayer.objects.none()
     return MLBApiSimilarPlayer.objects.filter(stat_view=stat_view).filter(filters).order_by('rank')
+
+
+def _recommended_similar_player_queryset(stat_view, *, mlbam_id=None, external_player_id=None, player_name=None):
+    filters = Q()
+    if mlbam_id:
+        filters |= Q(source_mlbam_id=str(mlbam_id))
+    normalized_name = _normalize_similar_name(player_name)
+    if normalized_name:
+        filters |= Q(source_name_ascii=normalized_name)
+    if not filters:
+        return MLBApiRecommendedSimilarPlayer.objects.none()
+    return MLBApiRecommendedSimilarPlayer.objects.filter(stat_view=stat_view).filter(filters).order_by('rank')
 
 
 def _team_detail_similar_players(view, stat_line):
@@ -491,12 +537,38 @@ def _team_detail_similar_players(view, stat_line):
     ]
 
 
+def _team_detail_similar_player_recommendations(view, stat_line):
+    player_name = stat_line.name_ascii or stat_line.player_name
+    return [
+        _serialize_recommended_similar_player(similar_player)
+        for similar_player in _recommended_similar_player_queryset(
+            view,
+            mlbam_id=stat_line.mlbam_id,
+            player_name=player_name,
+        )
+    ]
+
+
 def _roster_detail_similar_players(entry, requested_player_id):
     similar_players = {}
     for stat_view in (MLBApiStatLine.VIEW_BATTING, MLBApiStatLine.VIEW_PITCHING):
         similar_players[stat_view] = [
             _serialize_similar_player(similar_player)
             for similar_player in _similar_player_queryset(
+                stat_view,
+                mlbam_id=entry.player_id,
+                player_name=entry.player_name,
+            )
+        ]
+    return similar_players
+
+
+def _roster_detail_similar_player_recommendations(entry, requested_player_id):
+    similar_players = {}
+    for stat_view in (MLBApiStatLine.VIEW_BATTING, MLBApiStatLine.VIEW_PITCHING):
+        similar_players[stat_view] = [
+            _serialize_recommended_similar_player(similar_player)
+            for similar_player in _recommended_similar_player_queryset(
                 stat_view,
                 mlbam_id=entry.player_id,
                 player_name=entry.player_name,
@@ -613,6 +685,7 @@ def api_team_player_detail(request, team_code, player_id):
         'team': team_code.upper(),
         'player': player_payload,
         'similar_players': _team_detail_similar_players(view, target_line),
+        'similar_player_recommendations': _team_detail_similar_player_recommendations(view, target_line),
         'history_count': len(history),
         'history': history,
     })
@@ -753,6 +826,7 @@ def api_roster_player_detail(request, team_code, player_id):
         'team_name': roster_entry.team_name,
         'player': player_payload,
         'similar_players': _roster_detail_similar_players(roster_entry, player_id),
+        'similar_player_recommendations': _roster_detail_similar_player_recommendations(roster_entry, player_id),
         'history_count': len(history),
         'history': history,
     })

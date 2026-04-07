@@ -1,6 +1,14 @@
 from django.contrib import admin
 
-from .models import MLBApiSimilarPlayer, MLBPlayer, MLBPlayerPrediction, MLBPlayerSeason, MLBRosterEntry, MLBSimilarPlayer
+from .models import (
+    MLBApiRecommendedSimilarPlayer,
+    MLBApiSimilarPlayer,
+    MLBPlayer,
+    MLBPlayerPrediction,
+    MLBPlayerSeason,
+    MLBRosterEntry,
+    MLBSimilarPlayer,
+)
 
 
 class MLBPlayerSeasonInline(admin.TabularInline):
@@ -35,6 +43,13 @@ class MLBRosterEntryAdmin(admin.ModelAdmin):
 
 @admin.register(MLBApiSimilarPlayer)
 class MLBApiSimilarPlayerAdmin(admin.ModelAdmin):
+    list_display = ['stat_view', 'source_player_name', 'rank', 'similar_player_name', 'similarity_score']
+    list_filter = ['stat_view']
+    search_fields = ['source_player_name', 'similar_player_name', 'source_mlbam_id', 'similar_mlbam_id']
+
+
+@admin.register(MLBApiRecommendedSimilarPlayer)
+class MLBApiRecommendedSimilarPlayerAdmin(admin.ModelAdmin):
     list_display = ['stat_view', 'source_player_name', 'rank', 'similar_player_name', 'similarity_score']
     list_filter = ['stat_view']
     search_fields = ['source_player_name', 'similar_player_name', 'source_mlbam_id', 'similar_mlbam_id']
