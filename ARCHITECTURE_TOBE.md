@@ -760,6 +760,117 @@ $$
   - 포인트 예측뿐 아니라, 어떤 입력 변수가 예측에 영향을 주었는지 설명 가능한 구조를 유지한다.
 - **구현 위치**: 6.7의 유사 선수 기반 예측·시계열(TFT/LSTM 등) 모델은 성과 모델의 하위 예측기 역할을 하며, 그 결과는 WAR 기반 가치 환산 계층과 시장 모델로 전달된다. 최종 결과는 DB에 저장하거나 API/캐시를 통해 상세 페이지에 제공한다.
 
+#### 6.4.2.1. 유사 선수 API와 방법론 구분
+
+현재 선수 상세 API는 유사 선수 결과를 두 가지 방식으로 함께 제공한다.
+
+- `euclidean_similar_players`
+  - 기존 방식
+  - 소스 파일: `data/similar_batters_2018_2022.csv`, `data/similar_pitchers_2018_2022.csv`
+  - 계산 방식: 요약 통계 기반 Euclidean distance 유사도
+- `tabnet_similar_players`
+  - 신규 방식
+  - 소스 파일: `data/batters_recommendations.csv`, `data/pitchers_recommendations.csv`
+  - 계산 방식: TabNet 기반 representation learning + metric learning + cosine similarity
+
+하위 호환성을 위해 기존 응답 키는 alias로 유지한다.
+
+- `similar_players` -> `euclidean_similar_players`
+- `similar_player_recommendations` -> `tabnet_similar_players`
+
+#### 6.4.2.2. TabNet 기반 유사 선수 추천 파이프라인
+
+기존 유사 선수 탐색은 단순 통계 비교나 누적 기록 비교에 가까웠다. 새 방식은 딥러닝 기반 representation learning으로 선수 간 유사도 공간 자체를 학습한다.
+
+- **전체 흐름**:
+  - 데이터 전처리
+  - 선수 프로파일 생성
+  - TabNet 기반 인코딩
+  - Metric Learning 학습
+  - 임베딩 생성
+  - 유사도 계산
+  - FA 선수 추천
+
+#### 6.4.2.3. 데이터 전처리
+
+- 원본 데이터는 `2018~2022` 시즌별 기록으로 구성한다.
+- 동일 선수는 `player_id` 기준으로 통합한다.
+- 시즌별 성적은 최근 시즌에 더 높은 가중치를 주는 가중 평균으로 통합한다.
+- 숫자형 변수는 `StandardScaler` 등으로 정규화한다.
+- 범주형 변수(`Throws`, `Position` 등)는 인코딩한다.
+- 결측값은 median으로 보완하고, 이후 남는 `NaN`은 `0`으로 처리한다.
+
+#### 6.4.2.4. 피처 구성
+
+- **타자 입력 피처**:
+  - `WAR`, `AVG`, `OPS`, `HR`, `RBI`, `wRC+`, `wOBA`, `BABIP`, `ISO`, `BB%`, `K%`, `Exit_Velocity`, `Launch_Angle`, `Age`, `Debut Year`, `Height`, `Weight`, `Position`, `Bats`, `Throws`
+- **투수 입력 피처**:
+  - `WAR`, `ERA`, `FIP`, `WHIP`, `K/9`, `BB/9`, `IP`, `SO`, `xERA`, `xFIP`, `LOB%`, `BABIP`, `HR/9`, `velocity`, `Age`, `Debut Year`, `Height`, `Weight`, `Position`, `Bats`, `Throws`
+
+#### 6.4.2.5. TabNet 기반 표현 학습
+
+TabNet은 tabular 데이터에 특화된 딥러닝 모델이며, attention 기반 feature selection으로 샘플별 중요 피처를 선택하면서 representation을 학습한다.
+
+- 참고 논문: `TabNet: Attentive Interpretable Tabular Learning` (`https://arxiv.org/pdf/1908.07442`)
+- 입력 흐름:
+  - 입력
+  - feature selection mask
+  - transformation
+  - 반복
+  - 최종 representation
+- `TabNetPretrainer`를 사용해 선수 데이터의 feature 관계를 사전 학습한다.
+- 사전 학습된 TabNet 가중치를 초기값으로 사용해 encoder를 구성한다.
+- encoder 출력 위에 metric learning을 적용해 embedding 공간에서 선수 간 거리 관계를 학습한다.
+
+즉, 사전 학습 단계에서는 feature 구조를 이해하고, 이후 학습 단계에서는 그 representation 위에서 유사한 선수끼리 가깝고 다른 선수끼리는 멀어지도록 embedding 공간을 정렬한다.
+
+#### 6.4.2.6. Metric Learning
+
+TabNet representation 위에서 선수 간 유사도를 학습하기 위해 metric learning을 적용한다.
+
+- 학습 손실: Triplet Loss
+- 샘플 구성:
+  - Anchor: 기준 선수
+  - Positive: 유사한 선수
+  - Negative: 유사하지 않은 선수
+- Positive 선정 기준:
+  - 같은 포지션
+  - 유사한 나이대
+  - 유사한 성적
+- Negative 선정 기준:
+  - 위 조건을 만족하지 않는 선수
+
+손실 함수는 다음과 같다.
+
+`loss = max(0, d(A,P) - d(A,N) + margin)`
+
+이를 통해 Anchor와 Positive는 가깝게, Anchor와 Negative는 멀어지도록 embedding 공간을 학습한다. 최종 추천에는 이 embedding에 대해 cosine similarity를 계산해 사용한다.
+
+#### 6.4.2.7. 추천 조건과 최종 출력
+
+- 유사도 계산: `cosine similarity`
+- 추천 후보군: `FA 선수만 사용`
+- 추가 조건:
+  - 동일 포지션
+  - 유사한 나이대
+- 최종 출력:
+  - 각 선수별 `Top-3` 유사 FA 선수 추천
+
+#### 6.4.2.8. 설명 가능성(Explainable AI)
+
+TabNet의 feature mask를 활용하면 추천 이유를 어느 정도 해석 가능하다.
+
+- TabNet mask
+- 중요 feature 추출
+- Top-3 중요 feature 선택
+- 실제 값 비교
+
+즉, 모델이 중요하게 본 feature에서 실제로 유사했는지를 보여 주는 방식으로 추천 타당성을 설명할 수 있다.
+
+#### 6.4.2.9. 평가
+
+TabNet 기반 유사 선수 추천 파이프라인의 평가지표와 검증 프로토콜은 아직 별도 확정이 필요하다.
+
 ### 6.5. 앱 구조
 
 - **roster**: 기존 팀 매니저 (선수 명단, 영입/방출)
