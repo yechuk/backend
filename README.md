@@ -60,6 +60,111 @@ python manage.py load_team_api_stats --replace --batting-file data/batters_2018_
 heroku run python manage.py load_team_api_stats --replace --batting-file data/batters_2018_2022.csv --pitching-file data/pitchers_2018_2022.csv
 ```
 
+Load both similar-player datasets into the API tables:
+
+```bash
+python manage.py load_api_similar_players --replace
+heroku run -a <app-name> -- python manage.py load_api_similar_players --replace
+```
+
+## Similar Player Methods
+
+The player detail APIs expose two different similar-player lists.
+
+- `euclidean_similar_players`
+  Uses the legacy CSVs `data/similar_batters_2018_2022.csv` and `data/similar_pitchers_2018_2022.csv`.
+  This list was built with Euclidean-distance similarity over summary stats.
+- `tabnet_similar_players`
+  Uses `data/batters_recommendations.csv` and `data/pitchers_recommendations.csv`.
+  This list was built with deep-learning-based representation learning and metric learning.
+
+The current APIs also keep the older aliases for compatibility:
+
+- `similar_players` -> `euclidean_similar_players`
+- `similar_player_recommendations` -> `tabnet_similar_players`
+
+### TabNet-Based Similarity Pipeline
+
+The legacy approach relied on simple statistical comparison and accumulated record matching.
+The newer approach learns a similarity space with deep representation learning.
+
+Overall pipeline:
+
+`data preprocessing -> player profile generation -> TabNet encoding -> metric learning -> embeddings -> similarity computation -> FA recommendation`
+
+### Data Preprocessing
+
+- Raw data is built from season-level records from 2018 to 2022.
+- Records are merged by `player_id`.
+- Seasonal performance is aggregated with a weighted average, giving more weight to recent seasons.
+- Numeric features are normalized with standard scaling.
+- Categorical features such as `Throws` and `Position` are encoded.
+- Missing values are imputed with the median, and remaining `NaN` values are filled with `0`.
+
+### Feature Set
+
+Batter features:
+
+- `WAR`, `AVG`, `OPS`, `HR`, `RBI`, `wRC+`, `wOBA`, `BABIP`, `ISO`, `BB%`, `K%`, `Exit_Velocity`, `Launch_Angle`, `Age`, `Debut Year`, `Height`, `Weight`, `Position`, `Bats`, `Throws`
+
+Pitcher features:
+
+- `WAR`, `ERA`, `FIP`, `WHIP`, `K/9`, `BB/9`, `IP`, `SO`, `xERA`, `xFIP`, `LOB%`, `BABIP`, `HR/9`, `velocity`, `Age`, `Debut Year`, `Height`, `Weight`, `Position`, `Bats`, `Throws`
+
+### TabNet Representation Learning
+
+TabNet is a deep model specialized for tabular data.
+It learns representations with attention-based feature selection that can choose important features per sample.
+
+- Reference paper: [TabNet: Attentive Interpretable Tabular Learning](https://arxiv.org/pdf/1908.07442)
+- Input flow: `input -> feature selection mask -> transformation -> repeated steps -> final representation`
+- `TabNetPretrainer` is used to pretrain feature relationships in player data.
+- The pretrained TabNet weights are then used to initialize the feature encoder.
+- Metric learning is applied on top of the encoder output to learn a player embedding space.
+
+In practice, the pretraining stage helps the model understand feature structure, and the later metric-learning stage shapes distances so that similar players are close in the embedding space.
+
+### Metric Learning
+
+Metric learning is used to optimize similarity relationships between players in the learned embedding space.
+
+- Concept reference: [Metric Learning overview](https://ysk1m.tistory.com/9)
+- Training objective: Triplet Loss
+- Training tuple:
+  - Anchor: reference player
+  - Positive: similar player
+  - Negative: dissimilar player
+
+Positive samples are chosen using similar position, similar age range, and similar performance.
+Negative samples do not satisfy those conditions.
+
+The loss is:
+
+`loss = max(0, d(A, P) - d(A, N) + margin)`
+
+This makes Anchor and Positive closer, while pushing Anchor and Negative farther apart.
+After training, cosine similarity is computed on the learned embeddings for recommendation.
+
+### Recommendation Rules
+
+- Similarity is computed with cosine similarity:
+  - `similarity = cos(embedding_A, embedding_B)`
+- Candidate pool is restricted to FA players.
+- Recommendations are filtered to the same position and a similar age range.
+- Final output is Top-3 similar FA players for each player.
+
+### Explainability
+
+The TabNet feature mask is used for explainability.
+
+- TabNet mask -> important features -> Top-3 features -> compare actual values
+
+This makes it possible to explain why a recommendation was made by showing which features the model considered most important and how similar those values were in practice.
+
+### Evaluation
+
+The evaluation methodology for the TabNet-based recommendation pipeline is not finalized yet and should be defined separately.
+
 ## LSTM Training
 
 Train the WAR forecasting baseline on the season CSVs in `data/`:
