@@ -408,15 +408,20 @@ class TeamApiTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertEqual(len(payload['similar_players']), 1)
-        self.assertEqual(payload['similar_players'][0]['player_name'], 'Matthew Boyd')
-        self.assertEqual(payload['similar_players'][0]['similarity_score'], 48)
-        self.assertEqual(payload['similar_players'][0]['teams_detail_url'], '/api/teams/DET/players/571510/?view=pitching')
-        self.assertEqual(len(payload['similar_player_recommendations']), 1)
-        self.assertEqual(payload['similar_player_recommendations'][0]['player_name'], 'Joely Rodríguez')
-        self.assertAlmostEqual(payload['similar_player_recommendations'][0]['similarity_score'], 0.912345678)
-        self.assertEqual(payload['similar_player_recommendations'][0]['position'], 'P')
-        self.assertEqual(payload['similar_player_recommendations'][0]['age'], 30)
+        self.assertEqual(len(payload['euclidean_similar_players']), 1)
+        self.assertEqual(payload['euclidean_similar_players'][0]['player_name'], 'Matthew Boyd')
+        self.assertEqual(payload['euclidean_similar_players'][0]['similarity_score'], 48)
+        self.assertEqual(
+            payload['euclidean_similar_players'][0]['teams_detail_url'],
+            '/api/teams/DET/players/571510/?view=pitching',
+        )
+        self.assertEqual(len(payload['tabnet_similar_players']), 1)
+        self.assertEqual(payload['tabnet_similar_players'][0]['player_name'], 'Joely Rodríguez')
+        self.assertAlmostEqual(payload['tabnet_similar_players'][0]['similarity_score'], 0.912345678)
+        self.assertEqual(payload['tabnet_similar_players'][0]['position'], 'P')
+        self.assertEqual(payload['tabnet_similar_players'][0]['age'], 30)
+        self.assertEqual(payload['similar_players'], payload['euclidean_similar_players'])
+        self.assertEqual(payload['similar_player_recommendations'], payload['tabnet_similar_players'])
 
     def test_team_player_detail_endpoint_rejects_external_player_id_lookup(self):
         MLBApiStatLine.objects.create(
@@ -731,14 +736,16 @@ class RosterApiTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertEqual(payload['similar_players']['batting'], [])
-        self.assertEqual(len(payload['similar_players']['pitching']), 1)
-        self.assertEqual(payload['similar_players']['pitching'][0]['player_name'], 'Joely Rodríguez')
-        self.assertEqual(payload['similar_players']['pitching'][0]['similarity_score'], 51)
-        self.assertEqual(payload['similar_player_recommendations']['batting'], [])
-        self.assertEqual(len(payload['similar_player_recommendations']['pitching']), 1)
-        self.assertEqual(payload['similar_player_recommendations']['pitching'][0]['player_name'], 'Daniel Norris')
-        self.assertAlmostEqual(payload['similar_player_recommendations']['pitching'][0]['similarity_score'], 0.87654321)
+        self.assertEqual(payload['euclidean_similar_players']['batting'], [])
+        self.assertEqual(len(payload['euclidean_similar_players']['pitching']), 1)
+        self.assertEqual(payload['euclidean_similar_players']['pitching'][0]['player_name'], 'Joely Rodríguez')
+        self.assertEqual(payload['euclidean_similar_players']['pitching'][0]['similarity_score'], 51)
+        self.assertEqual(payload['tabnet_similar_players']['batting'], [])
+        self.assertEqual(len(payload['tabnet_similar_players']['pitching']), 1)
+        self.assertEqual(payload['tabnet_similar_players']['pitching'][0]['player_name'], 'Daniel Norris')
+        self.assertAlmostEqual(payload['tabnet_similar_players']['pitching'][0]['similarity_score'], 0.87654321)
+        self.assertEqual(payload['similar_players'], payload['euclidean_similar_players'])
+        self.assertEqual(payload['similar_player_recommendations'], payload['tabnet_similar_players'])
 
     def test_roster_player_detail_endpoint_rejects_external_player_id_lookup(self):
         stat_line = MLBApiStatLine.objects.get(stat_view='pitching', season=2022, mlbam_id='621345')

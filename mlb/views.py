@@ -679,13 +679,18 @@ def api_team_player_detail(request, team_code, player_id):
             for stat_line in _player_history_queryset(view, target_line)[:PLAYER_HISTORY_LIMIT]
         ]
 
+    euclidean_similar_players = _team_detail_similar_players(view, target_line)
+    tabnet_similar_players = _team_detail_similar_player_recommendations(view, target_line)
+
     return JsonResponse({
         'season': season,
         'view': view,
         'team': team_code.upper(),
         'player': player_payload,
-        'similar_players': _team_detail_similar_players(view, target_line),
-        'similar_player_recommendations': _team_detail_similar_player_recommendations(view, target_line),
+        'euclidean_similar_players': euclidean_similar_players,
+        'tabnet_similar_players': tabnet_similar_players,
+        'similar_players': euclidean_similar_players,
+        'similar_player_recommendations': tabnet_similar_players,
         'history_count': len(history),
         'history': history,
     })
@@ -819,14 +824,19 @@ def api_roster_player_detail(request, team_code, player_id):
     if response_season is None and history:
         response_season = history[0]['season']
 
+    euclidean_similar_players = _roster_detail_similar_players(roster_entry, player_id)
+    tabnet_similar_players = _roster_detail_similar_player_recommendations(roster_entry, player_id)
+
     return JsonResponse({
         'season': response_season,
         'roster_season': roster_entry.season,
         'team': roster_entry.team_abbreviation.upper(),
         'team_name': roster_entry.team_name,
         'player': player_payload,
-        'similar_players': _roster_detail_similar_players(roster_entry, player_id),
-        'similar_player_recommendations': _roster_detail_similar_player_recommendations(roster_entry, player_id),
+        'euclidean_similar_players': euclidean_similar_players,
+        'tabnet_similar_players': tabnet_similar_players,
+        'similar_players': euclidean_similar_players,
+        'similar_player_recommendations': tabnet_similar_players,
         'history_count': len(history),
         'history': history,
     })
