@@ -270,6 +270,69 @@ class TeamApiTests(TestCase):
         self.assertEqual(payload['history'][0]['height'], '6\' 0"')
         self.assertEqual(payload['history'][0]['bats'], 'L')
 
+    def test_team_player_detail_endpoint_prefers_roster_season_aggregate_stat_line(self):
+        MLBRosterEntry.objects.create(
+            season=2022,
+            team_id=144,
+            team_name='Atlanta Braves',
+            team_abbreviation='ATL',
+            league_name='National League',
+            division_name='National League East',
+            player_id=445926,
+            player_name='Jesse Chavez',
+            player_link='/api/v1/people/445926',
+            jersey_number='60',
+            position_code='1',
+            position_name='Pitcher',
+            position_type='Pitcher',
+            position_abbreviation='P',
+            status_code='A',
+            status_description='Active',
+            raw_data={},
+        )
+        for season, team, games, war in [
+            (2022, '- - -', '60', '0.72'),
+            (2021, 'ATL', '30', '0.96'),
+        ]:
+            MLBApiStatLine.objects.create(
+                stat_view='pitching',
+                season=season,
+                team=team,
+                player_name='Jesse Chavez',
+                name_ascii='Jesse Chavez',
+                external_player_id='5448',
+                mlbam_id='445926',
+                age=38,
+                war=float(war),
+                raw_stats={
+                    'Season': str(season),
+                    'Name': 'Jesse Chavez',
+                    'Team': team,
+                    'G': games,
+                    'WAR': war,
+                    'PlayerId': '5448',
+                    'MLBAMID': '445926',
+                },
+            )
+
+        response = self.client.get('/api/teams/ATL/players/445926/?view=pitching')
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['season'], 2022)
+        self.assertEqual(payload['player']['season'], 2022)
+        self.assertEqual(payload['player']['team'], '- - -')
+        self.assertEqual(payload['player']['stats']['games'], 60)
+        self.assertEqual(payload['history_count'], 1)
+        self.assertEqual([row['season'] for row in payload['history']], [2022])
+
+        response = self.client.get('/api/teams/ATL/players/445926/?season=2022&view=pitching')
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['season'], 2022)
+        self.assertEqual(payload['history_count'], 1)
+
     def test_team_player_detail_endpoint_with_season_returns_only_requested_season(self):
         for season, era, war, team in [
             (2022, '2.06', '2.0', 'ATL'),

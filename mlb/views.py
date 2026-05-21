@@ -256,6 +256,43 @@ def _player_history_queryset(view, stat_line):
     )
 
 
+def _resolve_team_roster_entry_for_player(team_code, raw_player_id, season=None):
+    mlbam_id = _to_int(raw_player_id, None)
+    if mlbam_id is None:
+        return None
+
+    return (
+        _filter_roster_entries(season, team_code=team_code)
+        .filter(player_id=mlbam_id)
+        .order_by('-season', 'team_abbreviation', 'player_name')
+        .first()
+    )
+
+
+def _resolve_roster_backed_stat_line(view, team_code, raw_player_id, season=None):
+    roster_entry = _resolve_team_roster_entry_for_player(team_code, raw_player_id, season=season)
+    if roster_entry is None:
+        return None
+
+    return (
+        _stat_queryset(view)
+        .filter(season=roster_entry.season, mlbam_id=str(roster_entry.player_id))
+        .exclude(team='')
+        .order_by('-war', 'team', 'player_name')
+        .first()
+    )
+
+
+def _should_prefer_roster_backed_stat_line(roster_backed_line, target_line, requested_season):
+    if roster_backed_line is None:
+        return False
+    if requested_season:
+        return target_line is None
+    if target_line is None:
+        return True
+    return roster_backed_line.season > target_line.season
+
+
 def _resolve_stat_player_photo_url(stat_line):
     try:
         mlbam_id = int(str(stat_line.mlbam_id).strip())
@@ -709,9 +746,11 @@ def api_team_player_detail(request, team_code, player_id):
     view = _normalize_stat_view(request.GET.get('view'))
     requested_season = request.GET.get('season')
     player_identity = Q(mlbam_id=str(player_id))
+    uses_roster_backed_fallback = False
     if requested_season:
         season = _resolve_stat_season(view, requested_season)
         target_line = _filter_stat_lines(view, season, team_code=team_code).filter(player_identity).first()
+        roster_backed_line = _resolve_roster_backed_stat_line(view, team_code, player_id, season=season)
     else:
         target_line = (
             _filter_stat_lines(view, None, team_code=team_code)
@@ -719,7 +758,15 @@ def api_team_player_detail(request, team_code, player_id):
             .order_by('-season', '-war', 'player_name')
             .first()
         )
+        roster_backed_line = _resolve_roster_backed_stat_line(view, team_code, player_id)
+        if _should_prefer_roster_backed_stat_line(roster_backed_line, target_line, requested_season):
+            target_line = roster_backed_line
+            uses_roster_backed_fallback = True
         season = target_line.season if target_line is not None else _resolve_stat_season(view, None)
+    if requested_season and _should_prefer_roster_backed_stat_line(roster_backed_line, target_line, requested_season):
+        target_line = roster_backed_line
+        uses_roster_backed_fallback = True
+        season = target_line.season
     if target_line is None:
         return JsonResponse(
             {'message': f'Player {player_id} was not found for team {team_code} in season {season}.'},
@@ -728,7 +775,7 @@ def api_team_player_detail(request, team_code, player_id):
 
     player_payload = _serialize_stat_player(target_line)
     player_payload['photo_url'] = _resolve_stat_player_photo_url(target_line)
-    if requested_season:
+    if requested_season or uses_roster_backed_fallback:
         history = [player_payload]
     else:
         history = [
