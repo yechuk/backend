@@ -10,6 +10,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 
 from .forms import ValuationSettingsForm
 from .models import (
+    MLBApiAavPrediction,
     MLBApiRecommendedSimilarPlayer,
     MLBApiSimilarPlayer,
     MLBApiStatLine,
@@ -24,6 +25,16 @@ LEADERBOARD_CSV = Path(settings.BASE_DIR) / 'data' / 'bp_export_20260312.csv'
 LEADERBOARD_PAGE_SIZE = 60
 SUPPORTED_STAT_VIEWS = {'batting', 'pitching'}
 PLAYER_HISTORY_LIMIT = 5
+AAV_PREDICTION_SOURCE = 'M1'
+AAV_PREDICTION_SOURCE_FILE = 'M1_2022_Predictions.xlsx'
+AAV_PREDICTION_SEASON = 2022
+AAV_PREDICTION_UNIT = 'USD_M'
+
+
+def _normalize_person_name(value):
+    normalized = unicodedata.normalize('NFKD', value or '')
+    ascii_only = normalized.encode('ascii', 'ignore').decode('ascii')
+    return ''.join(ch.lower() for ch in ascii_only if ch.isalnum())
 
 
 def _resolve_leaderboard_player_pk(name, team):
@@ -388,6 +399,54 @@ def _build_roster_player_history(entry, requested_player_id, requested_stat_seas
     return history
 
 
+def _resolve_api_aav_prediction_for_stat_line(stat_line):
+    if stat_line is None:
+        return None
+    if stat_line.stat_view != MLBApiStatLine.VIEW_BATTING or stat_line.season != AAV_PREDICTION_SEASON:
+        return None
+
+    normalized_name = _normalize_person_name(stat_line.name_ascii or stat_line.player_name)
+    if not normalized_name:
+        return None
+
+    return MLBApiAavPrediction.objects.filter(
+        season=AAV_PREDICTION_SEASON,
+        stat_view=MLBApiStatLine.VIEW_BATTING,
+        name_ascii=normalized_name,
+    ).first()
+
+
+def _serialize_api_aav_prediction(prediction):
+    meta = {
+        'source': AAV_PREDICTION_SOURCE,
+        'source_file': AAV_PREDICTION_SOURCE_FILE,
+        'season': AAV_PREDICTION_SEASON,
+        'view': MLBApiStatLine.VIEW_BATTING,
+        'unit': AAV_PREDICTION_UNIT,
+        'available': prediction is not None and prediction.predicted_aav_millions is not None,
+    }
+    if prediction is None or prediction.predicted_aav_millions is None:
+        return None, meta
+    return float(prediction.predicted_aav_millions), meta
+
+
+def _resolve_roster_detail_aav_prediction(entry, response_season):
+    if response_season is None:
+        return None
+
+    batting_line = (
+        MLBApiStatLine.objects.filter(
+            stat_view=MLBApiStatLine.VIEW_BATTING,
+            season=response_season,
+            mlbam_id=str(entry.player_id),
+        )
+        .exclude(team='')
+        .order_by('-war', 'team', 'player_name')
+        .first()
+    )
+    return _resolve_api_aav_prediction_for_stat_line(batting_line)
+
+
 def _has_meaningful_roster_stats(stat_payload, view):
     if stat_payload is None:
         return False
@@ -417,13 +476,11 @@ def _has_meaningful_roster_stats(stat_payload, view):
 
 
 def _normalize_photo_name(value):
-    normalized = unicodedata.normalize('NFKD', value or '')
-    ascii_only = normalized.encode('ascii', 'ignore').decode('ascii')
-    return ''.join(ch.lower() for ch in ascii_only if ch.isalnum())
+    return _normalize_person_name(value)
 
 
 def _normalize_similar_name(value):
-    return _normalize_photo_name(value)
+    return _normalize_person_name(value)
 
 
 def _find_roster_photo(team_name, player_name, photo_map=None):
@@ -681,12 +738,17 @@ def api_team_player_detail(request, team_code, player_id):
 
     euclidean_similar_players = _team_detail_similar_players(view, target_line)
     tabnet_similar_players = _team_detail_similar_player_recommendations(view, target_line)
+    predicted_aav, predicted_aav_meta = _serialize_api_aav_prediction(
+        _resolve_api_aav_prediction_for_stat_line(target_line)
+    )
 
     return JsonResponse({
         'season': season,
         'view': view,
         'team': team_code.upper(),
         'player': player_payload,
+        'predicted_aav': predicted_aav,
+        'predicted_aav_meta': predicted_aav_meta,
         'euclidean_similar_players': euclidean_similar_players,
         'tabnet_similar_players': tabnet_similar_players,
         'similar_players': euclidean_similar_players,
@@ -826,6 +888,9 @@ def api_roster_player_detail(request, team_code, player_id):
 
     euclidean_similar_players = _roster_detail_similar_players(roster_entry, player_id)
     tabnet_similar_players = _roster_detail_similar_player_recommendations(roster_entry, player_id)
+    predicted_aav, predicted_aav_meta = _serialize_api_aav_prediction(
+        _resolve_roster_detail_aav_prediction(roster_entry, response_season)
+    )
 
     return JsonResponse({
         'season': response_season,
@@ -833,6 +898,8 @@ def api_roster_player_detail(request, team_code, player_id):
         'team': roster_entry.team_abbreviation.upper(),
         'team_name': roster_entry.team_name,
         'player': player_payload,
+        'predicted_aav': predicted_aav,
+        'predicted_aav_meta': predicted_aav_meta,
         'euclidean_similar_players': euclidean_similar_players,
         'tabnet_similar_players': tabnet_similar_players,
         'similar_players': euclidean_similar_players,

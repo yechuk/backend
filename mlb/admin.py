@@ -1,6 +1,7 @@
 from django.contrib import admin
 
 from .models import (
+    MLBApiAavPrediction,
     MLBApiRecommendedSimilarPlayer,
     MLBApiSimilarPlayer,
     MLBPlayer,
@@ -53,3 +54,10 @@ class MLBApiRecommendedSimilarPlayerAdmin(admin.ModelAdmin):
     list_display = ['stat_view', 'source_player_name', 'rank', 'similar_player_name', 'similarity_score']
     list_filter = ['stat_view']
     search_fields = ['source_player_name', 'similar_player_name', 'source_mlbam_id', 'similar_mlbam_id']
+
+
+@admin.register(MLBApiAavPrediction)
+class MLBApiAavPredictionAdmin(admin.ModelAdmin):
+    list_display = ['source_label', 'season', 'stat_view', 'player_name', 'predicted_aav_millions']
+    list_filter = ['source_label', 'season', 'stat_view']
+    search_fields = ['player_name', 'name_ascii', 'team_code_raw']

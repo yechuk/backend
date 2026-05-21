@@ -3,8 +3,16 @@ from tempfile import TemporaryDirectory
 
 from django.core.management import call_command
 from django.test import TestCase
+from openpyxl import Workbook
 
-from .models import MLBApiRecommendedSimilarPlayer, MLBApiSimilarPlayer, MLBApiStatLine, MLBRosterEntry, MLBRosterPhoto
+from .models import (
+    MLBApiAavPrediction,
+    MLBApiRecommendedSimilarPlayer,
+    MLBApiSimilarPlayer,
+    MLBApiStatLine,
+    MLBRosterEntry,
+    MLBRosterPhoto,
+)
 
 
 class TeamApiTests(TestCase):
@@ -422,6 +430,75 @@ class TeamApiTests(TestCase):
         self.assertEqual(payload['tabnet_similar_players'][0]['age'], 30)
         self.assertEqual(payload['similar_players'], payload['euclidean_similar_players'])
         self.assertEqual(payload['similar_player_recommendations'], payload['tabnet_similar_players'])
+        self.assertIsNone(payload['predicted_aav'])
+        self.assertEqual(payload['predicted_aav_meta']['source'], 'M1')
+        self.assertFalse(payload['predicted_aav_meta']['available'])
+
+    def test_team_player_detail_endpoint_includes_predicted_aav_for_matching_batter(self):
+        MLBApiAavPrediction.objects.create(
+            stat_view='batting',
+            season=2022,
+            source_label='M1',
+            source_file='M1_2022_Predictions.xlsx',
+            player_name='Dansby Swanson',
+            name_ascii='dansbyswanson',
+            team_code_raw='ATL',
+            position_raw='SS',
+            actual_aav_millions='21.25',
+            predicted_aav_millions='19.75',
+            prediction_error_millions='-1.50',
+        )
+        MLBApiStatLine.objects.create(
+            stat_view='batting',
+            season=2022,
+            team='ATL',
+            player_name='Dansby Swanson',
+            name_ascii='Dansby Swanson',
+            external_player_id='30002',
+            mlbam_id='621020',
+            age=28,
+            war=6.4,
+            raw_stats={
+                'Season': '2022',
+                'Name': 'Dansby Swanson',
+                'Team': 'ATL',
+                'G': '162',
+                'PA': '696',
+                'HR': '25',
+                'RBI': '96',
+                'AVG': '0.277',
+                'OPS': '0.776',
+                'ISO': '0.179',
+                'BB%': '0.087',
+                'K%': '0.261',
+                'wOBA': '0.330',
+                'wRC+': '116',
+                'SB': '18',
+                'BABIP': '0.348',
+                'Age': '28',
+                'WAR': '6.4',
+                'NameASCII': 'Dansby Swanson',
+                'PlayerId': '30002',
+                'MLBAMID': '621020',
+            },
+        )
+
+        response = self.client.get('/api/teams/ATL/players/621020/?season=2022&view=batting')
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['predicted_aav'], 19.75)
+        self.assertEqual(
+            payload['predicted_aav_meta'],
+            {
+                'source': 'M1',
+                'source_file': 'M1_2022_Predictions.xlsx',
+                'season': 2022,
+                'view': 'batting',
+                'unit': 'USD_M',
+                'available': True,
+            },
+        )
 
     def test_team_player_detail_endpoint_rejects_external_player_id_lookup(self):
         MLBApiStatLine.objects.create(
@@ -746,6 +823,41 @@ class RosterApiTests(TestCase):
         self.assertAlmostEqual(payload['tabnet_similar_players']['pitching'][0]['similarity_score'], 0.87654321)
         self.assertEqual(payload['similar_players'], payload['euclidean_similar_players'])
         self.assertEqual(payload['similar_player_recommendations'], payload['tabnet_similar_players'])
+        self.assertIsNone(payload['predicted_aav'])
+        self.assertEqual(payload['predicted_aav_meta']['source'], 'M1')
+        self.assertFalse(payload['predicted_aav_meta']['available'])
+
+    def test_roster_player_detail_endpoint_includes_predicted_aav_for_matching_batter(self):
+        MLBApiAavPrediction.objects.create(
+            stat_view='batting',
+            season=2022,
+            source_label='M1',
+            source_file='M1_2022_Predictions.xlsx',
+            player_name='Dansby Swanson',
+            name_ascii='dansbyswanson',
+            team_code_raw='ATL',
+            position_raw='SS',
+            actual_aav_millions='21.25',
+            predicted_aav_millions='19.75',
+            prediction_error_millions='-1.50',
+        )
+
+        response = self.client.get('/api/rosters/ATL/players/621020/?season=2022')
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['predicted_aav'], 19.75)
+        self.assertEqual(
+            payload['predicted_aav_meta'],
+            {
+                'source': 'M1',
+                'source_file': 'M1_2022_Predictions.xlsx',
+                'season': 2022,
+                'view': 'batting',
+                'unit': 'USD_M',
+                'available': True,
+            },
+        )
 
     def test_roster_player_detail_endpoint_rejects_external_player_id_lookup(self):
         stat_line = MLBApiStatLine.objects.get(stat_view='pitching', season=2022, mlbam_id='621345')
@@ -970,6 +1082,70 @@ class LoadApiSimilarPlayersCommandTests(TestCase):
         self.assertEqual(str(pitcher_recommendation.similarity_score), '0.956789123')
         self.assertEqual(batter_recommendation.similar_mlbam_id, '596019')
         self.assertEqual(str(batter_recommendation.similarity_score), '0.812345678')
+
+
+class LoadApiAavPredictionsCommandTests(TestCase):
+    def test_command_loads_workbook_rows_into_db(self):
+        with TemporaryDirectory() as temp_dir:
+            data_dir = Path(temp_dir) / 'data'
+            data_dir.mkdir(parents=True, exist_ok=True)
+
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.title = '2022_M1_Predictions'
+            sheet.append(('2022년 FA 타자 — M1 시장 기반 모델 예측값', None, None, None, None, None, None))
+            sheet.append(('Ridge Regression | 학습: 2002~2021 | 예측: 2022년 FA 타자 | 단위: $M (백만달러)', None, None, None, None, None, None))
+            sheet.append(('연도', '선수명', '포지션', '계약팀', '실제 AAV ($M)', 'M1 예측값 ($M)', '오차 ($M)'))
+            sheet.append((2022, 'Carlos Correa', 'SS', 'MIN', 35.1, 24.08, -11.02))
+            sheet.append((2022, 'Corey Seager', 'SS', 'TEX', 32.5, 16.34, -16.16))
+            sheet.append((2021, 'Ignore Me', 'SS', 'NYY', 20.0, 18.0, -2.0))
+            sheet.append(('총 선수 수', '2', None, None, None, None, None))
+            workbook.save(data_dir / 'M1_2022_Predictions.xlsx')
+
+            call_command('load_api_aav_predictions', '--replace', base_dir=str(temp_dir), verbosity=0)
+
+        self.assertEqual(MLBApiAavPrediction.objects.count(), 2)
+        correa = MLBApiAavPrediction.objects.get(name_ascii='carloscorrea')
+        seager = MLBApiAavPrediction.objects.get(name_ascii='coreyseager')
+        self.assertEqual(correa.player_name, 'Carlos Correa')
+        self.assertEqual(correa.team_code_raw, 'MIN')
+        self.assertEqual(float(correa.predicted_aav_millions), 24.08)
+        self.assertEqual(float(correa.prediction_error_millions), -11.02)
+        self.assertEqual(seager.position_raw, 'SS')
+
+    def test_command_replace_reloads_rows_without_duplicates(self):
+        MLBApiAavPrediction.objects.create(
+            stat_view='batting',
+            season=2022,
+            source_label='M1',
+            source_file='M1_2022_Predictions.xlsx',
+            player_name='Carlos Correa',
+            name_ascii='carloscorrea',
+            team_code_raw='MIN',
+            position_raw='SS',
+            actual_aav_millions='35.10',
+            predicted_aav_millions='20.00',
+            prediction_error_millions='-15.10',
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            data_dir = Path(temp_dir) / 'data'
+            data_dir.mkdir(parents=True, exist_ok=True)
+
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.title = '2022_M1_Predictions'
+            sheet.append(('2022년 FA 타자 — M1 시장 기반 모델 예측값', None, None, None, None, None, None))
+            sheet.append(('Ridge Regression | 학습: 2002~2021 | 예측: 2022년 FA 타자 | 단위: $M (백만달러)', None, None, None, None, None, None))
+            sheet.append(('연도', '선수명', '포지션', '계약팀', '실제 AAV ($M)', 'M1 예측값 ($M)', '오차 ($M)'))
+            sheet.append((2022, 'Carlos Correa', 'SS', 'MIN', 35.1, 24.08, -11.02))
+            workbook.save(data_dir / 'M1_2022_Predictions.xlsx')
+
+            call_command('load_api_aav_predictions', '--replace', base_dir=str(temp_dir), verbosity=0)
+
+        self.assertEqual(MLBApiAavPrediction.objects.count(), 1)
+        correa = MLBApiAavPrediction.objects.get(name_ascii='carloscorrea')
+        self.assertEqual(float(correa.predicted_aav_millions), 24.08)
 
 
 class LoadRosterPhotosCommandTests(TestCase):
