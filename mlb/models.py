@@ -253,6 +253,36 @@ class MLBApiAavPrediction(models.Model):
         return f'{self.source_label} {self.season} {self.player_name}'
 
 
+class MLBApiPerformanceValuePrediction(models.Model):
+    """API-facing WAR-based performance value rows imported from offline workbook exports."""
+
+    stat_view = models.CharField(max_length=20, choices=MLBApiStatLine.VIEW_CHOICES, db_index=True)
+    season = models.PositiveIntegerField(db_index=True)
+    source_label = models.CharField(max_length=32, default='M2')
+    source_file = models.CharField(max_length=255, blank=True)
+    player_name = models.CharField(max_length=100)
+    name_ascii = models.CharField(max_length=100, blank=True, db_index=True)
+    player_type = models.CharField(max_length=20, blank=True)
+    current_team = models.CharField(max_length=10, blank=True)
+    target_team = models.CharField(max_length=10, db_index=True)
+    war_2022 = models.DecimalField(max_digits=8, decimal_places=3, null=True, blank=True)
+    predicted_war_avg = models.DecimalField(max_digits=8, decimal_places=3, null=True, blank=True)
+    actual_war_avg = models.DecimalField(max_digits=8, decimal_places=3, null=True, blank=True)
+    dollars_per_war_millions = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    predicted_value_millions = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-season', 'player_name', 'target_team']
+        unique_together = ['season', 'stat_view', 'name_ascii', 'target_team']
+        verbose_name = 'MLB API Performance Value Prediction'
+        verbose_name_plural = 'MLB API Performance Value Predictions'
+
+    def __str__(self):
+        return f'{self.source_label} {self.season} {self.player_name} -> {self.target_team}'
+
+
 class MLBPlayerPrediction(models.Model):
     """선수 예측 데이터 (미래 성적, 적정 가치)"""
 

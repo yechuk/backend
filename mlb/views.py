@@ -11,6 +11,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from .forms import ValuationSettingsForm
 from .models import (
     MLBApiAavPrediction,
+    MLBApiPerformanceValuePrediction,
     MLBApiRecommendedSimilarPlayer,
     MLBApiSimilarPlayer,
     MLBApiStatLine,
@@ -29,6 +30,10 @@ AAV_PREDICTION_SOURCE = 'M1'
 AAV_PREDICTION_SOURCE_FILE = 'M1_2022_Predictions.xlsx'
 AAV_PREDICTION_SEASON = 2022
 AAV_PREDICTION_UNIT = 'USD_M'
+PERFORMANCE_VALUE_SOURCE = 'M2'
+PERFORMANCE_VALUE_SOURCE_FILE = 'M2_WAR_Value_2022_Full.xlsx'
+PERFORMANCE_VALUE_SEASON = 2022
+PERFORMANCE_VALUE_UNIT = 'USD_M'
 
 
 def _normalize_person_name(value):
@@ -467,6 +472,54 @@ def _serialize_api_aav_prediction(prediction):
     return float(prediction.predicted_aav_millions), meta
 
 
+def _serialize_api_market_value_prediction(prediction):
+    value, legacy_meta = _serialize_api_aav_prediction(prediction)
+    return value, {
+        'source': legacy_meta['source'],
+        'source_file': legacy_meta['source_file'],
+        'season': legacy_meta['season'],
+        'view': legacy_meta['view'],
+        'basis': 'market_aav',
+        'unit': legacy_meta['unit'],
+        'available': legacy_meta['available'],
+    }
+
+
+def _resolve_api_performance_value_for_stat_line(stat_line, target_team):
+    if stat_line is None:
+        return None
+    if stat_line.season != PERFORMANCE_VALUE_SEASON:
+        return None
+
+    normalized_name = _normalize_person_name(stat_line.name_ascii or stat_line.player_name)
+    normalized_team = str(target_team or '').strip().upper()
+    if not normalized_name or not normalized_team:
+        return None
+
+    return MLBApiPerformanceValuePrediction.objects.filter(
+        season=PERFORMANCE_VALUE_SEASON,
+        stat_view=stat_line.stat_view,
+        name_ascii=normalized_name,
+        target_team__iexact=normalized_team,
+    ).first()
+
+
+def _serialize_api_performance_value_prediction(prediction, stat_view, target_team):
+    meta = {
+        'source': PERFORMANCE_VALUE_SOURCE,
+        'source_file': PERFORMANCE_VALUE_SOURCE_FILE,
+        'season': PERFORMANCE_VALUE_SEASON,
+        'view': stat_view,
+        'basis': 'war_value_aav',
+        'target_team': str(target_team or '').strip().upper(),
+        'unit': PERFORMANCE_VALUE_UNIT,
+        'available': prediction is not None and prediction.predicted_value_millions is not None,
+    }
+    if prediction is None or prediction.predicted_value_millions is None:
+        return None, meta
+    return float(prediction.predicted_value_millions), meta
+
+
 def _resolve_roster_detail_aav_prediction(entry, response_season):
     if response_season is None:
         return None
@@ -482,6 +535,44 @@ def _resolve_roster_detail_aav_prediction(entry, response_season):
         .first()
     )
     return _resolve_api_aav_prediction_for_stat_line(batting_line)
+
+
+def _resolve_roster_detail_performance_value_prediction(entry, response_season, target_team):
+    if response_season is None:
+        return None, MLBApiStatLine.VIEW_BATTING
+
+    stat_lines = list(
+        MLBApiStatLine.objects.filter(
+            season=response_season,
+            mlbam_id=str(entry.player_id),
+        )
+        .exclude(team='')
+        .order_by('-war', 'team', 'player_name')
+    )
+    if not stat_lines:
+        return None, MLBApiStatLine.VIEW_BATTING
+
+    is_pitcher = (
+        str(entry.position_type or '').strip().lower() == 'pitcher'
+        or str(entry.position_abbreviation or '').strip().upper() == 'P'
+    )
+    preferred_views = (
+        [MLBApiStatLine.VIEW_PITCHING, MLBApiStatLine.VIEW_BATTING]
+        if is_pitcher
+        else [MLBApiStatLine.VIEW_BATTING, MLBApiStatLine.VIEW_PITCHING]
+    )
+    fallback_stat_line = None
+    for view in preferred_views:
+        stat_line = next((line for line in stat_lines if line.stat_view == view), None)
+        if stat_line is None:
+            continue
+        if fallback_stat_line is None:
+            fallback_stat_line = stat_line
+        prediction = _resolve_api_performance_value_for_stat_line(stat_line, target_team)
+        if prediction is not None:
+            return prediction, stat_line.stat_view
+
+    return None, (fallback_stat_line or stat_lines[0]).stat_view
 
 
 def _has_meaningful_roster_stats(stat_payload, view):
@@ -785,8 +876,13 @@ def api_team_player_detail(request, team_code, player_id):
 
     euclidean_similar_players = _team_detail_similar_players(view, target_line)
     tabnet_similar_players = _team_detail_similar_player_recommendations(view, target_line)
-    predicted_aav, predicted_aav_meta = _serialize_api_aav_prediction(
-        _resolve_api_aav_prediction_for_stat_line(target_line)
+    aav_prediction = _resolve_api_aav_prediction_for_stat_line(target_line)
+    predicted_aav, predicted_aav_meta = _serialize_api_aav_prediction(aav_prediction)
+    predicted_market_value, predicted_market_value_meta = _serialize_api_market_value_prediction(aav_prediction)
+    predicted_performance_value, predicted_performance_value_meta = _serialize_api_performance_value_prediction(
+        _resolve_api_performance_value_for_stat_line(target_line, team_code),
+        view,
+        team_code,
     )
 
     return JsonResponse({
@@ -796,6 +892,10 @@ def api_team_player_detail(request, team_code, player_id):
         'player': player_payload,
         'predicted_aav': predicted_aav,
         'predicted_aav_meta': predicted_aav_meta,
+        'predicted_market_value': predicted_market_value,
+        'predicted_market_value_meta': predicted_market_value_meta,
+        'predicted_performance_value': predicted_performance_value,
+        'predicted_performance_value_meta': predicted_performance_value_meta,
         'euclidean_similar_players': euclidean_similar_players,
         'tabnet_similar_players': tabnet_similar_players,
         'similar_players': euclidean_similar_players,
@@ -935,8 +1035,18 @@ def api_roster_player_detail(request, team_code, player_id):
 
     euclidean_similar_players = _roster_detail_similar_players(roster_entry, player_id)
     tabnet_similar_players = _roster_detail_similar_player_recommendations(roster_entry, player_id)
-    predicted_aav, predicted_aav_meta = _serialize_api_aav_prediction(
-        _resolve_roster_detail_aav_prediction(roster_entry, response_season)
+    aav_prediction = _resolve_roster_detail_aav_prediction(roster_entry, response_season)
+    predicted_aav, predicted_aav_meta = _serialize_api_aav_prediction(aav_prediction)
+    predicted_market_value, predicted_market_value_meta = _serialize_api_market_value_prediction(aav_prediction)
+    performance_prediction, performance_view = _resolve_roster_detail_performance_value_prediction(
+        roster_entry,
+        response_season,
+        team_code,
+    )
+    predicted_performance_value, predicted_performance_value_meta = _serialize_api_performance_value_prediction(
+        performance_prediction,
+        performance_view,
+        team_code,
     )
 
     return JsonResponse({
@@ -947,6 +1057,10 @@ def api_roster_player_detail(request, team_code, player_id):
         'player': player_payload,
         'predicted_aav': predicted_aav,
         'predicted_aav_meta': predicted_aav_meta,
+        'predicted_market_value': predicted_market_value,
+        'predicted_market_value_meta': predicted_market_value_meta,
+        'predicted_performance_value': predicted_performance_value,
+        'predicted_performance_value_meta': predicted_performance_value_meta,
         'euclidean_similar_players': euclidean_similar_players,
         'tabnet_similar_players': tabnet_similar_players,
         'similar_players': euclidean_similar_players,

@@ -7,6 +7,7 @@ from openpyxl import Workbook
 
 from .models import (
     MLBApiAavPrediction,
+    MLBApiPerformanceValuePrediction,
     MLBApiRecommendedSimilarPlayer,
     MLBApiSimilarPlayer,
     MLBApiStatLine,
@@ -511,6 +512,22 @@ class TeamApiTests(TestCase):
             predicted_aav_millions='19.75',
             prediction_error_millions='-1.50',
         )
+        MLBApiPerformanceValuePrediction.objects.create(
+            stat_view='batting',
+            season=2022,
+            source_label='M2',
+            source_file='M2_WAR_Value_2022_Full.xlsx',
+            player_name='Dansby Swanson',
+            name_ascii='dansbyswanson',
+            player_type='hitter',
+            current_team='ATL',
+            target_team='ATL',
+            war_2022='6.400',
+            predicted_war_avg='3.125',
+            actual_war_avg='2.500',
+            dollars_per_war_millions='7.10',
+            predicted_value_millions='22.19',
+        )
         MLBApiStatLine.objects.create(
             stat_view='batting',
             season=2022,
@@ -551,6 +568,33 @@ class TeamApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload['predicted_aav'], 19.75)
+        self.assertEqual(payload['predicted_market_value'], 19.75)
+        self.assertEqual(
+            payload['predicted_market_value_meta'],
+            {
+                'source': 'M1',
+                'source_file': 'M1_2022_Predictions.xlsx',
+                'season': 2022,
+                'view': 'batting',
+                'basis': 'market_aav',
+                'unit': 'USD_M',
+                'available': True,
+            },
+        )
+        self.assertEqual(payload['predicted_performance_value'], 22.19)
+        self.assertEqual(
+            payload['predicted_performance_value_meta'],
+            {
+                'source': 'M2',
+                'source_file': 'M2_WAR_Value_2022_Full.xlsx',
+                'season': 2022,
+                'view': 'batting',
+                'basis': 'war_value_aav',
+                'target_team': 'ATL',
+                'unit': 'USD_M',
+                'available': True,
+            },
+        )
         self.assertEqual(
             payload['predicted_aav_meta'],
             {
@@ -904,12 +948,32 @@ class RosterApiTests(TestCase):
             predicted_aav_millions='19.75',
             prediction_error_millions='-1.50',
         )
+        MLBApiPerformanceValuePrediction.objects.create(
+            stat_view='batting',
+            season=2022,
+            source_label='M2',
+            source_file='M2_WAR_Value_2022_Full.xlsx',
+            player_name='Dansby Swanson',
+            name_ascii='dansbyswanson',
+            player_type='hitter',
+            current_team='ATL',
+            target_team='ATL',
+            war_2022='6.400',
+            predicted_war_avg='3.125',
+            actual_war_avg='2.500',
+            dollars_per_war_millions='7.10',
+            predicted_value_millions='22.19',
+        )
 
         response = self.client.get('/api/rosters/ATL/players/621020/?season=2022')
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload['predicted_aav'], 19.75)
+        self.assertEqual(payload['predicted_market_value'], 19.75)
+        self.assertEqual(payload['predicted_performance_value'], 22.19)
+        self.assertEqual(payload['predicted_performance_value_meta']['target_team'], 'ATL')
+        self.assertEqual(payload['predicted_performance_value_meta']['basis'], 'war_value_aav')
         self.assertEqual(
             payload['predicted_aav_meta'],
             {
@@ -1209,6 +1273,91 @@ class LoadApiAavPredictionsCommandTests(TestCase):
         self.assertEqual(MLBApiAavPrediction.objects.count(), 1)
         correa = MLBApiAavPrediction.objects.get(name_ascii='carloscorrea')
         self.assertEqual(float(correa.predicted_aav_millions), 24.08)
+
+
+class LoadApiPerformanceValuesCommandTests(TestCase):
+    def test_command_loads_workbook_rows_into_db(self):
+        with TemporaryDirectory() as temp_dir:
+            data_dir = Path(temp_dir) / 'data'
+            data_dir.mkdir(parents=True, exist_ok=True)
+
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.title = 'player_team_values'
+            sheet.append(('2022 FA player team values', None, None, None, None, None, None, None, None, None, None))
+            sheet.append((
+                'player_name_key',
+                'Name',
+                'player_type',
+                'Season',
+                'current_team',
+                'target_team',
+                'WAR(2022)',
+                'pred_WAR(23~25avg)',
+                'actual_WAR(23~25avg)',
+                '$/WAR($M)',
+                'M2 value($M)',
+            ))
+            sheet.append(('dansbyswanson', 'Dansby Swanson', 'hitter', 2022, 'ATL', 'ATL', 6.4, 3.125, 2.5, 7.1, 22.19))
+            sheet.append(('dansbyswanson', 'Dansby Swanson', 'hitter', 2022, 'ATL', 'TEX', 6.4, 3.125, 2.5, 9.56, 29.88))
+            sheet.append(('aaronnola', 'Aaron Nola', 'pitcher', 2022, 'PHI', 'ATL', 6.296, 3.185, 2.624, 7.1, 22.61))
+            sheet.append(('ignoreme', 'Ignore Me', 'hitter', 2021, 'NYY', 'ATL', 1.0, 1.0, 1.0, 7.1, 7.1))
+            workbook.save(data_dir / 'M2_WAR_Value_2022_Full.xlsx')
+
+            call_command('load_api_performance_values', '--replace', base_dir=str(temp_dir), verbosity=0)
+
+        self.assertEqual(MLBApiPerformanceValuePrediction.objects.count(), 3)
+        swanson_atl = MLBApiPerformanceValuePrediction.objects.get(name_ascii='dansbyswanson', target_team='ATL')
+        swanson_tex = MLBApiPerformanceValuePrediction.objects.get(name_ascii='dansbyswanson', target_team='TEX')
+        nola = MLBApiPerformanceValuePrediction.objects.get(name_ascii='aaronnola')
+        self.assertEqual(swanson_atl.stat_view, 'batting')
+        self.assertEqual(nola.stat_view, 'pitching')
+        self.assertEqual(float(swanson_atl.predicted_value_millions), 22.19)
+        self.assertEqual(float(swanson_tex.dollars_per_war_millions), 9.56)
+
+    def test_command_replace_reloads_rows_without_duplicates(self):
+        MLBApiPerformanceValuePrediction.objects.create(
+            stat_view='batting',
+            season=2022,
+            source_label='M2',
+            source_file='M2_WAR_Value_2022_Full.xlsx',
+            player_name='Dansby Swanson',
+            name_ascii='dansbyswanson',
+            player_type='hitter',
+            current_team='ATL',
+            target_team='ATL',
+            predicted_value_millions='20.00',
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            data_dir = Path(temp_dir) / 'data'
+            data_dir.mkdir(parents=True, exist_ok=True)
+
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.title = 'player_team_values'
+            sheet.append(('2022 FA player team values', None, None, None, None, None, None, None, None, None, None))
+            sheet.append((
+                'player_name_key',
+                'Name',
+                'player_type',
+                'Season',
+                'current_team',
+                'target_team',
+                'WAR(2022)',
+                'pred_WAR(23~25avg)',
+                'actual_WAR(23~25avg)',
+                '$/WAR($M)',
+                'M2 value($M)',
+            ))
+            sheet.append(('dansbyswanson', 'Dansby Swanson', 'hitter', 2022, 'ATL', 'ATL', 6.4, 3.125, 2.5, 7.1, 22.19))
+            workbook.save(data_dir / 'M2_WAR_Value_2022_Full.xlsx')
+
+            call_command('load_api_performance_values', '--replace', base_dir=str(temp_dir), verbosity=0)
+
+        self.assertEqual(MLBApiPerformanceValuePrediction.objects.count(), 1)
+        swanson = MLBApiPerformanceValuePrediction.objects.get(name_ascii='dansbyswanson')
+        self.assertEqual(float(swanson.predicted_value_millions), 22.19)
 
 
 class LoadRosterPhotosCommandTests(TestCase):

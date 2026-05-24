@@ -2,6 +2,7 @@ from django.contrib import admin
 
 from .models import (
     MLBApiAavPrediction,
+    MLBApiPerformanceValuePrediction,
     MLBApiRecommendedSimilarPlayer,
     MLBApiSimilarPlayer,
     MLBPlayer,
@@ -61,3 +62,17 @@ class MLBApiAavPredictionAdmin(admin.ModelAdmin):
     list_display = ['source_label', 'season', 'stat_view', 'player_name', 'predicted_aav_millions']
     list_filter = ['source_label', 'season', 'stat_view']
     search_fields = ['player_name', 'name_ascii', 'team_code_raw']
+
+
+@admin.register(MLBApiPerformanceValuePrediction)
+class MLBApiPerformanceValuePredictionAdmin(admin.ModelAdmin):
+    list_display = [
+        'source_label',
+        'season',
+        'stat_view',
+        'player_name',
+        'target_team',
+        'predicted_value_millions',
+    ]
+    list_filter = ['source_label', 'season', 'stat_view', 'target_team']
+    search_fields = ['player_name', 'name_ascii', 'current_team', 'target_team']
