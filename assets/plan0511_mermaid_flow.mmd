@@ -1,0 +1,13 @@
+flowchart TB
+    A["선수 데이터"] --> B["성과모델<br/>(Performance Model)"]
+    A --> C["시장모델<br/>(Market Model)"]
+
+    B --> D["predicted_fair_value<br/>공정 가치"]
+    C --> E["predicted_market_price<br/>예상 체결가"]
+
+    D --> F["가치 갭 계산<br/>Value Gap"]
+    E --> F
+
+    F --> G["고평가 선수 회피"]
+    F --> H["저평가 선수 발굴"]
+    F --> I["협상 기준선 설정"]

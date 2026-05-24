@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>BRIEFING</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="briefing_pdf.css" />
+</head>
+<body>
+<h1 id="mlb-fa-계약-의사결정-예측-모델-요약">MLB FA 계약 의사결정 예측
+모델 요약</h1>
+<h2 id="개요">1. 개요</h2>
+<p>이 프로젝트는 FA 선수 영입 판단을 돕기 위해, <strong>계약 당시
+기대수익률</strong>과 <strong>계약 이후 실제 순수입</strong>을 비교하는
+AI 기반 의사결정 지원 모델이다. 선수의 미래 기여도와 시장 계약가를
+분리해서 예측한 뒤, 실제 성과가 계약 비용을 정당화했는지 사후
+검증한다.</p>
+<h2 id="핵심-용어">2. 핵심 용어</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>용어</th>
+<th>의미</th>
+<th>모델에서의 역할</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>FA</td>
+<td>자유계약선수. 기존 구단을 떠나 여러 구단과 계약 협상이 가능한
+선수</td>
+<td>시장에서 실제 계약가격이 형성되는 표본</td>
+</tr>
+<tr>
+<td>AAV</td>
+<td>Average Annual Value. 계약 총액을 계약 연수로 나눈 연평균
+계약가치</td>
+<td>시장 모델의 예측 타깃</td>
+</tr>
+<tr>
+<td>WAR</td>
+<td>Wins Above Replacement. 대체 선수 대비 몇 승을 더 만들어내는지
+나타내는 종합 성과 지표</td>
+<td>성과 모델의 핵심 타깃 및 가치 환산 기준</td>
+</tr>
+<tr>
+<td>expected_roi</td>
+<td>계약 당시 기대 성과가치에서 계약비용을 뺀 뒤 계약비용으로 나눈
+값</td>
+<td>영입 전 기대수익률</td>
+</tr>
+<tr>
+<td>actual_net_income</td>
+<td>계약 이후 실제 성과가치에서 실제 계약비용을 뺀 값</td>
+<td>영입 사후 성공 여부의 핵심 기준</td>
+</tr>
+</tbody>
+</table>
+<p>본 프로젝트는 AAV를 시장에서 형성되는 가격 지표로, WAR를 선수의 경기
+기여도를 나타내는 성과 지표로 사용한다. 모델 구조는 <strong>성능을
+예측하는 모델</strong>과 <strong>가격을 예측하는 모델</strong>을
+분리하는 방식이다.</p>
+<h2 id="연구-문제">3. 연구 문제</h2>
+<p>야구 선수 계약은 단순히 과거 성적이 좋은 선수에게 많은 돈을 주는
+문제가 아니다. 특히 FA 계약은 언론과 팬덤에서 “적정가 영입”으로
+평가되더라도, 계약 기간이 끝난 뒤 실제 성과가 계약비용을 정당화하지
+못하면 구단 입장에서는 실패 영입이 될 수 있다.</p>
+<p>따라서 발표의 문제제기는 다음 질문으로 시작한다.</p>
+<ol type="1">
+<li>FA 계약 당시 시장과 언론은 이 영입을 적정가로 보았는가?</li>
+<li>모델이 추정한 기대수익률은 계약비용을 정당화했는가?</li>
+<li>계약 이후 실제 순수입은 양수였는가?</li>
+<li>적정가처럼 보였던 계약이 실제로는 시장 실패였는가?</li>
+</ol>
+<p>따라서 본 프로젝트의 핵심은 <strong>FA 계약 선수에 한해 기대수익률
+대비 실제 순수입을 계산하고, 성공적인 영입과 시장 실패를 구분하는 모델링
+문제</strong>다.</p>
+<p>발표 도입 문장은 다음처럼 가져간다.</p>
+<blockquote>
+<p>“FA 계약 직후 언론은 어떤 영입을 시장가에 맞춘 합리적인 계약이라고
+평가합니다. 하지만 계약이 끝난 뒤 실제 성과가 계약비용을 넘지 못했다면,
+그 영입은 정말 성공이었을까요? 이 프로젝트는 FA 계약 당시의 기대수익률과
+사후 실제 순수입을 비교해, 적정가처럼 보였던 계약 안의 시장 실패를
+찾습니다.”</p>
+</blockquote>
+<h2 id="전체-모델-구조">4. 전체 모델 구조</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>구분</th>
+<th>성과 모델</th>
+<th>시장 모델</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>예측 대상</td>
+<td>향후 WAR 또는 향후 3년 평균 WAR</td>
+<td>FA 계약의 연평균 계약가치 AAV</td>
+</tr>
+<tr>
+<td>출력값</td>
+<td>predicted_war, predicted_value</td>
+<td>predicted_aav, 예상 계약 총액, expected_roi</td>
+</tr>
+<tr>
+<td>핵심 입력</td>
+<td>최근 2~4시즌 성적, 나이, 포지션, 예상 출전 규모(IP/PA), 팀 맥락</td>
+<td>성과 예측값, 최근 성적, 나이, 포지션, 시장 환경, 팀 페이롤, 계약
+맥락</td>
+</tr>
+<tr>
+<td>모델 후보</td>
+<td>CatBoost, Random Forest, Ridge, MLP, SVR</td>
+<td>Ridge, GBM, Random Forest, ExtraTrees, SVR, MLP</td>
+</tr>
+<tr>
+<td>해석</td>
+<td>미래 실력 가치</td>
+<td>실제 시장에서 형성될 가격</td>
+</tr>
+</tbody>
+</table>
+<p>최종 산출물에서는 두 값을 함께 제시한다. 예를 들어 시장 모델이 높게
+예측하고 성과 모델이 낮게 예측하면, “시장에서는 비싸지만 성과 대비
+과대평가 가능성이 있다”고 해석할 수 있다.</p>
+<p>사후 검증에서는 계약 기간의 실제 WAR를 <code>$ / WAR</code>로 환산해
+<code>actual_net_income</code>을 계산한다. 직접 매출 데이터가 부족한 1차
+구현에서는 실제 순수입을 <code>실제 성과가치 - 실제 계약비용</code>으로
+근사하고, 추후 관중·마케팅·인기도 대리 변수를 추가한다.</p>
+<h2 id="시장-모델-fa-aav-예측">5. 시장 모델: FA AAV 예측</h2>
+<p>시장 모델은 “이 선수가 실제 FA 시장에서 연평균 얼마를 받을 가능성이
+있는가”를 예측한다. 입력 단위는 <strong>FA 계약 1건 + 계약 직전 최대
+3시즌 성적</strong>이다.</p>
+<p>1차 베이스라인은 Ridge Regression(alpha=0.1)이다. 타깃은 log(AAV)로
+두고, 예측 후 exp()로 달러 단위 AAV를 복원한다. Ridge를 기준 모델로 둔
+이유는 성능이 준수하면서도 계수 해석이 가능하기 때문이다.</p>
+<p>선형모델 계열은 main-effect만 쓰는 사양과 상호작용항을 추가한 사양을
+함께 실험한다. 비교 대상은 <code>main-effect</code>,
+<code>2-way interaction</code>,
+<code>2-way + 3-way interaction</code>이며, 대표 후보는
+<code>WAR × Position</code>, <code>WAR × Age</code>,
+<code>WAR × 시장환경</code>, <code>Age × Position</code>,
+<code>WAR × Age × Position</code>,
+<code>WAR × Position × 시장환경</code>이다.</p>
+<p>ML 모델을 사용하는 상황에서 남은 성능 개선의 핵심은 단순히 알고리즘을
+바꾸는 것이 아니라 <strong>새로운 feature 탐색과 feature
+engineering</strong>이다. 따라서 최종 발표에서는 잔차가 큰 계약을 먼저
+찾고, 그 원인을 <code>출전 기회</code>, <code>포지션 수요</code>,
+<code>역할 변화</code>, <code>부상 위험</code>, <code>시장 환경</code>,
+<code>스타성/마케팅 프리미엄</code> 같은 변수 후보로 바꾼 뒤 재검증하는
+흐름을 강조한다.</p>
+<p>주요 피처 그룹은 다음과 같다.</p>
+<ul>
+<li>최근 가치와 추세: WAR_lag1~3, WAR_mean, WAR_max, WAR_trend</li>
+<li>타자 생산성: wOBA, wRC+, ISO, 홈런, 도루, 볼넷률, 삼진률</li>
+<li>투수 품질: FIP, ERA, xFIP, WHIP, K/BB, BB/9, HR/9</li>
+<li>역할과 규모: 이닝, 선발 여부, 세이브, 마무리 경험, 성과 안정성</li>
+<li>시장 맥락: 시즌 인덱스, 시즌별 FA 평균 AAV, 팀 페이롤</li>
+<li>계약 맥락: 재계약 여부, 특정 에이전트 프리미엄</li>
+</ul>
+<p>탐색 실험 결과는 다음과 같다.</p>
+<table>
+<thead>
+<tr>
+<th>모델</th>
+<th style="text-align: right;">타자 R²</th>
+<th style="text-align: right;">투수 R²</th>
+<th>해석</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Ridge</td>
+<td style="text-align: right;">0.764</td>
+<td style="text-align: right;">0.644</td>
+<td>기준 모델. 성능과 해석 가능성 균형</td>
+</tr>
+<tr>
+<td>GBM</td>
+<td style="text-align: right;">0.780</td>
+<td style="text-align: right;">0.675</td>
+<td>성능은 더 높지만 설명 보완 필요</td>
+</tr>
+</tbody>
+</table>
+<p>추가 실험에서는 OLS/Ridge/Lasso에 동일한 interaction feature set을
+적용하고, 홀드아웃 성능뿐 아니라 Adjusted R², AIC/BIC, 계수 안정성, 잔차
+해석이 개선되는지 확인한다. 개선 폭이 작거나 계수가 불안정하면
+interaction 모델은 운영 후보가 아니라 설명용 비교 실험으로 남긴다.</p>
+<p>발표용 coefficient table은 해석 가능한 선형 기준모델에서 다음처럼
+제시한다. 현재 값은 FA 계약 데이터와 선수 시즌 WAR를 결합한 OLS baseline
+기준이며, 단위는 백만 달러 AAV다.</p>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 31%" />
+<col style="width: 36%" />
+<col style="width: 31%" />
+</colgroup>
+<thead>
+<tr>
+<th>변수 또는 효과</th>
+<th style="text-align: right;">계수/효과</th>
+<th>해석</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>WAR_prev3</code></td>
+<td style="text-align: right;">+1.42</td>
+<td>직전 3년 WAR 합계가 1 증가할 때 AAV가 약 142만 달러 상승</td>
+</tr>
+<tr>
+<td><code>Age_c</code></td>
+<td style="text-align: right;">-0.39</td>
+<td>표본 평균 나이보다 1세 높을 때 AAV가 약 39만 달러 하락</td>
+</tr>
+<tr>
+<td><code>Age_c2</code></td>
+<td style="text-align: right;">+0.04</td>
+<td>나이 효과가 완전한 직선이 아니므로 노화 곡선 피처 보강 필요</td>
+</tr>
+<tr>
+<td>RF 포지션 $/WAR</td>
+<td style="text-align: right;">+2.24</td>
+<td>우익수 표본에서 WAR 가격 프리미엄이 가장 크게 추정됨</td>
+</tr>
+<tr>
+<td>선발 RHP $/WAR</td>
+<td style="text-align: right;">+1.86</td>
+<td>선발 우완 투수는 평균보다 높은 시장 가격을 받는 경향</td>
+</tr>
+<tr>
+<td>C 포지션 $/WAR</td>
+<td style="text-align: right;">+0.74</td>
+<td>포수는 단순 WAR만으로 시장가 설명이 약해 수비/리드 피처 보강
+필요</td>
+</tr>
+</tbody>
+</table>
+<h2 id="왜-모델을-둘로-나누는가">6. 왜 모델을 둘로 나누는가</h2>
+<p>시장가격과 실제 성과가 항상 같지는 않다. 유명세, 포지션 수요, 부상
+이력, 에이전트 협상력, 팀의 지불 여력 때문에 같은 성과를 가진 선수라도
+계약가격이 달라질 수 있다.</p>
+<p>그래서 본 프로젝트는 다음처럼 분리한다.</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>값</th>
+<th>의미</th>
+<th>의사결정 해석</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>predicted_value</td>
+<td>WAR를 달러 가치로 환산한 성과 기반 가치</td>
+<td>선수가 경기장에서 만들어낼 것으로 기대되는 가치</td>
+</tr>
+<tr>
+<td>predicted_aav</td>
+<td>시장에서 형성될 것으로 예측되는 연평균 계약가</td>
+<td>실제 영입 경쟁에서 필요할 가능성이 있는 가격</td>
+</tr>
+<tr>
+<td>차이값</td>
+<td>predicted_aav - predicted_value</td>
+<td>고평가·저평가 또는 협상 위험 신호</td>
+</tr>
+</tbody>
+</table>
+<p>이 차이를 이용하면 “좋은 선수인가?”가 아니라 “그 가격에 계약할
+만한가?”라는 의사결정 질문으로 바꿀 수 있다.</p>
+<h2 id="성공적인-fa-영입의-정의">6.1. 성공적인 FA 영입의 정의</h2>
+<p>성공적인 영입은 계약 당시의 기대와 사후 실현값을 함께 봐야 한다.</p>
+<ul>
+<li><code>contract_cost = AAV x 계약연수</code> 또는 보장 총액</li>
+<li><code>expected_roi = (예상 성과가치 - contract_cost) / contract_cost</code></li>
+<li><code>actual_net_income = 실제 성과가치 - 실제 계약비용</code></li>
+<li><code>actual_roi = actual_net_income / 실제 계약비용</code></li>
+</ul>
+<p>판정 기준은 다음과 같다.</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>구분</th>
+<th>조건</th>
+<th>해석</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>강한 성공</td>
+<td><code>actual_net_income &gt; 0</code>이고
+<code>actual_roi &gt;= expected_roi</code></td>
+<td>기대보다 좋은 영입</td>
+</tr>
+<tr>
+<td>제한적 성공</td>
+<td><code>actual_net_income &gt; 0</code>이지만
+<code>actual_roi &lt; expected_roi</code></td>
+<td>돈은 벌었지만 기대에는 미달</td>
+</tr>
+<tr>
+<td>실패 영입</td>
+<td><code>actual_net_income &lt; 0</code></td>
+<td>계약비용 대비 성과 부족</td>
+</tr>
+<tr>
+<td>시장 과소평가</td>
+<td>계약 당시 저평가였지만 <code>actual_net_income &gt; 0</code></td>
+<td>시장 실패를 활용한 사례</td>
+</tr>
+</tbody>
+</table>
+<p>발표에서는 특정 FA 계약을 예로 들어 “당시 기사에서는 적정가 영입으로
+평가되었지만, 사후 실제 순수입 기준으로는 실패였다” 또는 “언론은 큰
+주목을 하지 않았지만 실제로는 높은 순수입을 만든 계약이었다”는 방식으로
+문제를 제기한다.</p>
+<h2 id="검증-계획">7. 검증 계획</h2>
+<p>최종 평가는 시간 순서를 지키는 방식으로 진행한다. 학습에 미래 시즌
+정보가 섞이면 실제 운영 상황보다 성능이 과대평가될 수 있기 때문이다.</p>
+<ul>
+<li>기준 시점: 2022년</li>
+<li>예측 대상: 2023~2025년</li>
+<li>정량 평가: R², RMSE, MAE, MAPE</li>
+<li>정성 평가: 실제 FA 계약 사례에서 과대평가·저평가 판단이 합리적인지
+확인</li>
+<li>해석 검증: Ridge 계수, SHAP 또는 permutation importance로 주요
+요인을 설명</li>
+<li>선형모델 검증: main-effect, 2-way interaction, 3-way interaction
+사양을 같은 분할에서 비교</li>
+<li>영입 성공 검증: <code>expected_roi</code>,
+<code>actual_net_income</code>, <code>actual_roi</code>,
+<code>roi_gap</code>으로 사후 성공 여부를 분류</li>
+<li>잔차 진단: 잔차 플롯을 그리고 큰 잔차 사례를 찾아 원인 가설과 개선
+변수를 연결</li>
+</ul>
+<p>시각화는 <code>expected_roi</code>를 x축,
+<code>actual_net_income</code>을 y축으로 둔 산점도를 사용한다. 오른쪽
+위는 기대도 높고 실제 순수입도 높은 성공 영입, 오른쪽 아래는 기대는
+높았지만 실제로 실패한 시장 실패 사례로 해석한다.</p>
+<p>모델 개선 과정은 다음 스토리로 제시한다.</p>
+<ol type="1">
+<li>기준 모델을 먼저 학습한다.</li>
+<li><code>예측값 vs 실제값</code>, <code>예측값 vs 잔차</code>,
+<code>포지션/역할별 잔차</code> 플롯을 그린다.</li>
+<li>잔차가 큰 선수/계약을 뽑아 부상, 역할 변화, 출전 기회 급감, 포지션
+수요, 스타성 같은 원인 가설을 붙인다.</li>
+<li>그 가설을 반영하기 위해 <code>projected_IP/PA</code>, 역할 변수,
+interaction term, 시장 평균 AAV, 부상/인기도 대리 변수를 추가한다.</li>
+<li>같은 홀드아웃에서 개선 전후 성능과 잔차 플롯을 비교한다.</li>
+</ol>
+<p>이 흐름을 발표에 넣으면 “최종 모델을 골랐다”가 아니라 “오차를 보고
+가설을 세운 뒤 모델을 개선했다”는 실험 과정이 드러난다.</p>
+<h2 id="현재-한계와-개선-방향">8. 현재 한계와 개선 방향</h2>
+<p>현재 모델은 성적, 나이, 포지션, 시장 환경을 중심으로 설계되어 있다.
+다만 실제 계약에는 부상 이력, 역할 변화, 포지션 공급 부족, 스타성 같은
+변수가 추가로 작용한다.</p>
+<p>따라서 후속 개선은 다음 순서로 진행한다.</p>
+<ol type="1">
+<li>잔차가 큰 FA 계약 사례를 먼저 분류하고 원인 가설을 세운다.</li>
+<li>부상 이력과 IL 등재 여부 같은 내구성 변수를 추가한다.</li>
+<li>선발, 불펜, 마무리, 셋업맨 등 투수 역할을 세분화한다.</li>
+<li>포지션 희소성, 시장 평균 AAV, 스타성/마케팅 대리 변수를
+실험한다.</li>
+<li>2023~2025 홀드아웃 검증으로 feature engineering 전후 성능을
+비교한다.</li>
+<li>GBM 또는 CatBoost 채택 시 SHAP 기반 설명을 추가한다.</li>
+</ol>
+</body>
+</html>

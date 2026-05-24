@@ -1,0 +1,26 @@
+<!doctype html><html><head><meta charset="utf-8" /><style>body{margin:0;background:white;} .mermaid{margin:0;padding:24px;}</style></head><body><div class="mermaid">flowchart TB
+    A[&quot;과거에도 비효율적인 선수 보상 책정이 존재함&quot;] --&gt; B[&quot;비효율적인 책정이 일부 개선됨&lt;br/&gt;(Hakes &amp; Sauer, 2006)&quot;]
+    B --&gt; C[&quot;하지만 현재에도 FA 시장에서 비효율적인 보상 책정이 있는 것으로 보임&lt;br/&gt;(신문기사 등 인용)&quot;]
+    C --&gt; D[&quot;(성과 중심 구단 관점에서) 시장의 과대평가 지표와 과소평가 지표가 존재할 것임(가설 설정)&quot;]
+    D --&gt; F
+    D --&gt; R
+
+    subgraph P[&quot;플랫폼이 제공하는 솔루션&quot;]
+        direction TB
+        F[&quot;성과모델:&lt;br/&gt;팀 규모, 성과기반 등을 통제하는 독립변수 중심&quot;]
+        G[&quot;시장모델:&lt;br/&gt;성과기반 변수에 시장 관련 독립변수까지 추가&quot;]
+        H[&quot;성과모델 결괏값과 시장모델 결괏값을&lt;br/&gt;함께 제시함&quot;]
+        F --&gt; H
+        G --&gt; H
+    end
+
+    R[&quot;실제로 과대평가 지표와 과소평가 지표가 존재함&quot;]
+
+    H --&gt; J[&quot;성적 중시 구단에서는 시장의 과대/과소평가 현상을&lt;br/&gt;이점으로 활용할 수 있으며, 더 적은 비용으로&lt;br/&gt;성적 향상을 하는 데에 플랫폼이 기여할 수 있다&lt;br/&gt;(기여점)&quot;]
+    R --&gt; J
+    J --&gt; K[&quot;고평가 선수 회피&quot;]
+    J --&gt; L[&quot;저평가 선수 발굴&quot;]
+    J --&gt; M[&quot;협상 기준선 설정&quot;]
+
+    style P fill:#f7f8ff,stroke:#6f84b8,stroke-width:3px,stroke-dasharray: 6 4
+</div><script src="file:///C:/Users/junho/AppData/Roaming/npm/node_modules/%40mermaid-js/mermaid-cli/node_modules/mermaid/dist/mermaid.min.js"></script><script>mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose', flowchart: { htmlLabels: true, useMaxWidth: true } });</script></body></html>

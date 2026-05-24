@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body { margin: 0; background: white; }
+    .mermaid { margin: 0; padding: 12px; }
+  </style>
+</head>
+<body>
+  <div class="mermaid">flowchart TB
+    A[&quot;선수 데이터&quot;] --&gt; B[&quot;성과모델&lt;br/&gt;(Performance Model)&quot;]
+    A --&gt; C[&quot;시장모델&lt;br/&gt;(Market Model)&quot;]
+
+    B --&gt; D[&quot;predicted_fair_value&lt;br/&gt;공정 가치&quot;]
+    C --&gt; E[&quot;predicted_market_price&lt;br/&gt;예상 체결가&quot;]
+
+    D --&gt; F[&quot;가치 갭 계산&lt;br/&gt;Value Gap&quot;]
+    E --&gt; F
+
+    F --&gt; G[&quot;고평가 선수 회피&quot;]
+    F --&gt; H[&quot;저평가 선수 발굴&quot;]
+    F --&gt; I[&quot;협상 기준선 설정&quot;]
+</div>
+  <script src="file:///C:/Users/junho/AppData/Roaming/npm/node_modules/%40mermaid-js/mermaid-cli/node_modules/mermaid/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose', flowchart: { htmlLabels: true, useMaxWidth: true } });
+  </script>
+</body>
+</html>

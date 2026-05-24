@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160" role="img" aria-labelledby="title desc">
+  <title id="title">PostgreSQL Elephant Icon</title>
+  <desc id="desc">PostgreSQL-style elephant logo for architecture diagrams.</desc>
+  <g fill="#3F6F99" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round" stroke-width="6">
+    <path d="M44 24c-12 0-24 10-24 26 0 15 5 34 9 49 5 16 12 29 22 29 8 0 13-10 20-21 7-11 11-23 11-34 0-14-10-49-38-49Z"/>
+    <path d="M116 24c12 0 24 10 24 26 0 15-5 34-9 49-5 16-12 29-22 29-8 0-13-10-20-21-7-11-11-23-11-34 0-14 10-49 38-49Z"/>
+    <path d="M80 20c-22 0-40 14-40 39 0 12 3 25 8 37 6 15 10 27 10 38 0 16 7 26 22 26s22-10 22-26c0-11 4-23 10-38 5-12 8-25 8-37 0-25-18-39-40-39Z"/>
+    <path d="M55 54c-7 0-13 7-13 16 0 10 2 18 2 26 0 12 6 22 17 22 6 0 11-2 11-7 0-6-6-13-6-26 0-8 2-16 2-22 0-5-5-9-13-9Z"/>
+    <path d="M105 54c7 0 13 7 13 16 0 10-2 18-2 26 0 12-6 22-17 22-6 0-11-2-11-7 0-6 6-13 6-26 0-8-2-16-2-22 0-5 5-9 13-9Z"/>
+    <path d="M58 117c-2 8-10 15-23 15-7 0-12-2-16-5 3-5 11-8 19-8 8 0 14-1 20-2Z"/>
+    <path d="M102 117c2 8 10 15 23 15 7 0 12-2 16-5-3-5-11-8-19-8-8 0-14-1-20-2Z"/>
+  </g>
+  <ellipse cx="64" cy="61" rx="5" ry="3.5" fill="#FFFFFF"/>
+  <ellipse cx="96" cy="61" rx="5" ry="3.5" fill="#FFFFFF"/>
+</svg>

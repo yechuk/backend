@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>SCHEDULE</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="schedule_pdf.css" />
+</head>
+<body>
+<h1 id="개발-일정">개발 일정</h1>
+<h2 id="일정표">일정표</h2>
+<table>
+<colgroup>
+<col class="date-col">
+<col class="team-col">
+<col class="task-col">
+<col class="detail-col">
+</colgroup>
+<thead>
+<tr>
+<th>
+기한
+</th>
+<th>
+부서
+</th>
+<th>
+주요 과업
+</th>
+<th>
+세부 내용
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td rowspan="6">
+5/3<br>(D-7)
+</td>
+<td rowspan="2">
+프런트엔드
+</td>
+<td>
+프런트엔드 영문 기능 추가
+</td>
+<td>
+<ul>
+<li>
+서비스 화면의 주요 문구를 영어로 제공한다.
+</li>
+<li>
+주요 기능 설명과 결과 화면의 영문 UI를 보완한다.
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td>
+프런트엔드 배포 완료
+</td>
+<td>
+<ul>
+<li>
+프런트엔드 변경사항을 배포 환경에 반영한다.
+</li>
+<li>
+배포 후 주요 화면과 기능의 정상 동작 여부를 확인한다.
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td rowspan="2">
+AAV 모델/백엔드
+</td>
+<td>
+계약금 산정 기능 기획 및 구현 착수
+</td>
+<td>
+<ul>
+<li>
+현재 AAV만 예측하는 구조를 계약금 산정까지 확장한다.
+</li>
+<li>
+입력값, 계산 방식, 결과 표시 방식을 정의한다.
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td>
+계약금 구성 요소 조사
+</td>
+<td>
+<ul>
+<li>
+연봉, 인센티브, 사이닝보너스 등 계약금 세부 요소를 조사한다.
+</li>
+<li>
+서비스에서 반영할 항목과 제외할 항목의 기준을 정리한다.
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td>
+문서화
+</td>
+<td>
+야구 웹사이트 시각화 및 유사 선수 추천 사례 조사
+</td>
+<td>
+<ul>
+<li>
+기존 야구 웹사이트에서 선수 성적, 계약, 비교 정보를 어떤 방식으로
+시각화하는지 조사한다.
+</li>
+<li>
+유사 선수 추천 기능이 있는 경우 어떤 기준으로 선수를 추천하는지
+확인한다.
+</li>
+<li>
+공개된 유사 선수 추천 알고리즘이나 산식이 있다면 함께 조사한다.
+</li>
+<li>
+TabNet 기반 유사도 추천 결과를 단순 유사도 순서 목록으로 제공할지,
+산점도·네트워크·비교 차트 등 시각화 기법으로 보완할지 검토한다.
+</li>
+<li>
+우리 서비스에 적용할 수 있는 시각화 방식과 차별화 가능한 표현 방식을
+정리한다.
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td>
+AAV 모델/문서화
+</td>
+<td>
+MLB 공식 선수 사진 기반 외모 매력도 점수 활용 검토
+</td>
+<td>
+<ul>
+<li>
+SCUT-FBP5500 기반 pretrained facial beauty prediction 모델을 사용해 MLB
+공식 선수 사진을 1~5점 범위의 외모 매력도 점수로 변환하는 방식을
+검토한다.
+</li>
+<li>
+공식 선수 사진은 배경과 사진 규격이 표준화되어 있고 표정도 어느 정도
+일관되어 있어, 매력도 점수 추출 시 사진 품질 노이즈가 상대적으로 적은
+장점이 있는지 검토한다.
+</li>
+<li>
+추출한 매력도 점수를 기존 ML 모델의 성적, 나이, 포지션, 계약 변수 등
+정형 예측변수와 결합하는 방식을 설계한다.
+</li>
+<li>
+기본 AAV 모델과 매력도 점수 추가 모델의 예측 성능을 비교하는 실험 계획을
+수립한다.
+</li>
+<li>
+외모 매력도 점수가 FA 시장가치 및 AAV 예측에 추가 설명력을 제공하는지
+실험한다.
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td rowspan="6">
+5/10<br>(D-14)
+</td>
+<td>
+WAR 모델/AAV 모델
+</td>
+<td>
+출전 횟수 반영 모델 개선
+</td>
+<td>
+<ul>
+<li>
+부상 등으로 인한 출전 횟수 변동을 WAR 모델과 AAV 모델에 함께 반영한다.
+</li>
+<li>
+투수는 innings pitched(IP), 타자는 plate appearance(PA)를 주요 변수로
+활용한다.
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td>
+WAR 모델/백엔드/프런트엔드
+</td>
+<td>
+WAR 기반 계약가치 산정 방식 구현
+</td>
+<td>
+<ul>
+<li>
+해석이 명확한 WAR*$/WAR 접근 방식을 구현한다.
+</li>
+<li>
+WAR 예측 모델과 사용자가 설정한 $/WAR 기준을 바탕으로 계약가치를
+산정한다.
+</li>
+<li>
+산정된 예측값을 DB에 적재한다.
+</li>
+<li>
+선수 상세페이지에서 직접 AAV 예측값과 함께 제공한다.
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td rowspan="2">
+AAV 모델
+</td>
+<td>
+AAV 모델 검증 및 오차 분석
+</td>
+<td>
+<ul>
+<li>
+2023~2025년 FA 계약 데이터를 기준으로 예측 AAV와 실제 AAV를 비교한다.
+</li>
+<li>
+과대 예측 및 과소 예측 사례의 원인을 분석한다.
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td>
+SHAP 해석 안정성 개선
+</td>
+<td>
+<ul>
+<li>
+SHAP 등 시각화 기반 해석 기법 적용 시 공선성이 높은 변수의 영향을
+점검한다.
+</li>
+<li>
+공통 특성을 공유하는 변수들을 묶는 방안을 검토한다.
+</li>
+<li>
+해석 안정성을 높이기 위한 차원축소 적용 가능성을 검토한다.
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td>
+공통
+</td>
+<td>
+평가 기준과 서비스 기준 분리
+</td>
+<td>
+<ul>
+<li>
+모델 성능 평가는 2022년을 기준 시점으로 두고, 그 이후 시즌 데이터를
+테스트셋으로 활용한다.
+</li>
+<li>
+실제 서비스는 2026년 현재 시점을 기준으로 최신 선수 및 계약 데이터를
+반영한다.
+</li>
+<li>
+AAV 모델, WAR 모델, 백엔드, 프런트엔드 전반에서 평가용 데이터 기준과
+서비스용 데이터 기준을 분리한다.
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td>
+문서화
+</td>
+<td>
+MLB 계약 사례 조사 및 비교 문서화
+</td>
+<td>
+<ul>
+<li>
+언론에서 화제가 되었던 MLB 선수 계약 사례를 조사한다.
+</li>
+<li>
+선행연구에서 주로 언급되는 계약 사례를 정리한다.
+</li>
+<li>
+우리의 유사선수 추천 결과와 유사한 점과 다른 점을 비교한다.
+</li>
+<li>
+우리 접근 방식의 우수한 점과 부족한 점을 문서화한다.
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td rowspan="6">
+5/17<br>(D-21)
+</td>
+<td>
+AAV 모델/백엔드/프런트엔드
+</td>
+<td>
+계약금 산정 기능 개발 완료
+</td>
+<td>
+<ul>
+<li>
+AAV 예측 결과와 함께 계약금 산정 결과를 제공한다.
+</li>
+<li>
+백엔드 계산 결과를 프런트엔드에서 확인할 수 있도록 연결한다.
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td>
+AAV 모델
+</td>
+<td>
+AAV 모델 개선 방향 반영
+</td>
+<td>
+<ul>
+<li>
+부상 이력, 투수 역할 변화, 시장 수요 쏠림 등 기존 모델의 오차 원인을
+정리한다.
+</li>
+<li>
+개선 가능한 변수를 선별한다.
+</li>
+<li>
+중요도가 높은 변수를 모델에 반영한다.
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td>
+AAV 모델/백엔드/문서화
+</td>
+<td>
+외모 매력도 변수 반영 여부 결정
+</td>
+<td>
+<ul>
+<li>
+SCUT-FBP5500 기반 외모 매력도 점수를 결합한 모델의 실험 결과를 기존
+성적, 나이, 포지션, 계약 변수 기반 모델과 비교한다.
+</li>
+<li>
+예측 성능 개선이 유의미한 경우 보조 변수로 반영하고, 그렇지 않은 경우
+분석 결과만 차별화 요소로 제시한다.
+</li>
+<li>
+최종 발표에서는 외모 매력도 변수가 인과적 판단이 아니라 예측 성능 개선
+여부를 검증하기 위한 보조 변수임을 명확히 설명한다.
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td rowspan="2">
+백엔드/프런트엔드
+</td>
+<td>
+다음 시즌 FA 대상 선수 리스트 제공
+</td>
+<td>
+<ul>
+<li>
+다음 시즌에 FA 계약이 종료되는 선수 목록을 제공한다.
+</li>
+<li>
+사용자가 예측 대상 선수를 쉽게 확인할 수 있도록 화면에 표시한다.
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td>
+선수 상세페이지 과거 계약 이력 제공
+</td>
+<td>
+<ul>
+<li>
+선수의 과거 계약 이력이 존재하는지 확인한다.
+</li>
+<li>
+상세페이지에서 계약 연도, 소속팀, 계약 기간, AAV, 총액 등 주요 정보를
+제공한다.
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td>
+공통
+</td>
+<td>
+외부 피드백 컨택 시도
+</td>
+<td>
+<ul>
+<li>
+MLB 및 야구 업계 종사자 중 피드백 요청 대상을 정리한다.
+</li>
+<li>
+서비스 피드백을 받을 수 있도록 외부 컨택을 시도한다.
+</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>

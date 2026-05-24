@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160" role="img" aria-labelledby="title desc">
+  <title id="title">Online Inference Icon</title>
+  <desc id="desc">Simple online inference icon for architecture diagrams.</desc>
+  <rect x="34" y="28" width="92" height="72" rx="10" fill="#EAF1F8" stroke="#2F5D87" stroke-width="4"/>
+  <circle cx="62" cy="54" r="8" fill="#5A7DA8"/>
+  <circle cx="80" cy="54" r="8" fill="#5A7DA8"/>
+  <circle cx="98" cy="54" r="8" fill="#5A7DA8"/>
+  <path d="M54 78h52" stroke="#2F5D87" stroke-width="4" stroke-linecap="round"/>
+  <path d="M80 100v18" stroke="#2F5D87" stroke-width="4" stroke-linecap="round"/>
+  <path d="M60 118h40" stroke="#2F5D87" stroke-width="4" stroke-linecap="round"/>
+  <path d="M50 124c9-13 22-21 30-21s21 8 30 21" fill="none" stroke="#5A7DA8" stroke-width="5" stroke-linecap="round"/>
+  <text x="80" y="150" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#1F3E5A">온라인 추론</text>
+</svg>
