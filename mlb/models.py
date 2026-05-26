@@ -283,6 +283,30 @@ class MLBApiPerformanceValuePrediction(models.Model):
         return f'{self.source_label} {self.season} {self.player_name} -> {self.target_team}'
 
 
+class MLBApiTeamDollarPerWar(models.Model):
+    """Team-level $/WAR rows imported from team_dollar_per_war.csv."""
+
+    team = models.CharField(max_length=10, unique=True, db_index=True)
+    avg_payroll_m_3yr = models.FloatField(null=True, blank=True)
+    avg_batting_war_3yr = models.FloatField(null=True, blank=True)
+    avg_pitching_war_3yr = models.FloatField(null=True, blank=True)
+    avg_team_war_3yr = models.FloatField(null=True, blank=True)
+    n_years = models.PositiveSmallIntegerField(null=True, blank=True)
+    avg_team_war_3yr_safe = models.FloatField(null=True, blank=True)
+    dollar_per_war_millions = models.FloatField(null=True, blank=True)
+    dollar_per_war = models.FloatField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-dollar_per_war_millions', 'team']
+        verbose_name = 'MLB API Team Dollar Per WAR'
+        verbose_name_plural = 'MLB API Team Dollars Per WAR'
+
+    def __str__(self):
+        return f'{self.team} ${self.dollar_per_war_millions}/WAR'
+
+
 class MLBPlayerPrediction(models.Model):
     """선수 예측 데이터 (미래 성적, 적정 가치)"""
 

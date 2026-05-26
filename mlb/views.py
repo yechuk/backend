@@ -15,6 +15,7 @@ from .models import (
     MLBApiRecommendedSimilarPlayer,
     MLBApiSimilarPlayer,
     MLBApiStatLine,
+    MLBApiTeamDollarPerWar,
     MLBPlayer,
     MLBRosterEntry,
     MLBRosterPhoto,
@@ -23,6 +24,7 @@ from .models import (
 
 
 LEADERBOARD_CSV = Path(settings.BASE_DIR) / 'data' / 'bp_export_20260312.csv'
+TEAM_DOLLAR_PER_WAR_SOURCE_FILE = 'team_dollar_per_war.csv'
 LEADERBOARD_PAGE_SIZE = 60
 SUPPORTED_STAT_VIEWS = {'batting', 'pitching'}
 PLAYER_HISTORY_LIMIT = 5
@@ -245,6 +247,20 @@ def _serialize_stat_player(stat_line):
 
     base['detail_url'] = _player_detail_url(base['team'], api_player_id)
     return base
+
+
+def _serialize_team_dollar_per_war(row):
+    return {
+        'team': row.team,
+        'avg_payroll_m_3yr': row.avg_payroll_m_3yr,
+        'avg_batting_war_3yr': row.avg_batting_war_3yr,
+        'avg_pitching_war_3yr': row.avg_pitching_war_3yr,
+        'avg_team_war_3yr': row.avg_team_war_3yr,
+        'n_years': row.n_years,
+        'avg_team_war_3yr_safe': row.avg_team_war_3yr_safe,
+        'dollar_per_war_millions': row.dollar_per_war_millions,
+        'dollar_per_war': row.dollar_per_war,
+    }
 
 
 def _player_history_queryset(view, stat_line):
@@ -808,6 +824,18 @@ def api_teams(request):
         'count': len(teams),
         'teams': teams,
         'image_url': '/api/team-image',
+    })
+
+
+def api_team_dollar_per_war(request):
+    teams = [
+        _serialize_team_dollar_per_war(row)
+        for row in MLBApiTeamDollarPerWar.objects.all()
+    ]
+    return JsonResponse({
+        'source': TEAM_DOLLAR_PER_WAR_SOURCE_FILE,
+        'count': len(teams),
+        'teams': teams,
     })
 
 

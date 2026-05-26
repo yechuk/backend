@@ -2,6 +2,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import TestCase
 from openpyxl import Workbook
 
@@ -11,9 +12,143 @@ from .models import (
     MLBApiRecommendedSimilarPlayer,
     MLBApiSimilarPlayer,
     MLBApiStatLine,
+    MLBApiTeamDollarPerWar,
     MLBRosterEntry,
     MLBRosterPhoto,
 )
+
+
+class TeamDollarPerWarApiTests(TestCase):
+    def setUp(self):
+        MLBApiTeamDollarPerWar.objects.create(
+            team='WSN',
+            avg_payroll_m_3yr=117.0,
+            avg_batting_war_3yr=5.966111490666666,
+            avg_pitching_war_3yr=2.970400869666667,
+            avg_team_war_3yr=8.936512360333333,
+            n_years=3,
+            avg_team_war_3yr_safe=8.936512360333333,
+            dollar_per_war_millions=13.092355863494367,
+            dollar_per_war=13092355.863494366,
+        )
+
+    def test_endpoint_returns_team_dollar_per_war_rows_from_db(self):
+        response = self.client.get('/api/team-dollar-per-war/')
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['source'], 'team_dollar_per_war.csv')
+        self.assertEqual(payload['count'], 1)
+
+        first_team = payload['teams'][0]
+        self.assertEqual(first_team['team'], 'WSN')
+        self.assertIsInstance(first_team['avg_payroll_m_3yr'], float)
+        self.assertIsInstance(first_team['avg_batting_war_3yr'], float)
+        self.assertIsInstance(first_team['avg_pitching_war_3yr'], float)
+        self.assertIsInstance(first_team['avg_team_war_3yr'], float)
+        self.assertIsInstance(first_team['n_years'], int)
+        self.assertIsInstance(first_team['avg_team_war_3yr_safe'], float)
+        self.assertIsInstance(first_team['dollar_per_war_millions'], float)
+        self.assertIsInstance(first_team['dollar_per_war'], float)
+
+    def test_endpoint_no_slash_alias_returns_same_payload(self):
+        response = self.client.get('/api/team-dollar-per-war')
+        slash_response = self.client.get('/api/team-dollar-per-war/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), slash_response.json())
+
+    def test_endpoint_returns_empty_list_when_db_is_empty(self):
+        MLBApiTeamDollarPerWar.objects.all().delete()
+
+        response = self.client.get('/api/team-dollar-per-war/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {
+            'source': 'team_dollar_per_war.csv',
+            'count': 0,
+            'teams': [],
+        })
+
+
+class LoadTeamDollarPerWarCommandTests(TestCase):
+    def _write_csv(self, base_dir, body):
+        data_dir = Path(base_dir) / 'data'
+        data_dir.mkdir(parents=True, exist_ok=True)
+        (data_dir / 'team_dollar_per_war.csv').write_text(body, encoding='utf-8')
+
+    def test_command_loads_csv_rows_into_db(self):
+        with TemporaryDirectory() as temp_dir:
+            self._write_csv(
+                temp_dir,
+                'Team,avg_payroll_M_3yr,avg_batting_war_3yr,avg_pitching_war_3yr,avg_team_war_3yr,n_years,avg_team_war_3yr_safe,dollar_per_war_M,dollar_per_war\n'
+                'WSN,117.0,5.96,2.97,8.93,3,8.93,13.09,13090000\n'
+                'TEX,121.13,8.48,4.18,12.66,3,12.66,9.56,9560000\n',
+            )
+
+            call_command('load_team_dollar_per_war', '--replace', base_dir=temp_dir, verbosity=0)
+
+        self.assertEqual(MLBApiTeamDollarPerWar.objects.count(), 2)
+        wsn = MLBApiTeamDollarPerWar.objects.get(team='WSN')
+        self.assertEqual(wsn.n_years, 3)
+        self.assertEqual(wsn.avg_payroll_m_3yr, 117.0)
+        self.assertEqual(wsn.dollar_per_war_millions, 13.09)
+
+    def test_command_replace_deletes_existing_rows_before_load(self):
+        MLBApiTeamDollarPerWar.objects.create(team='OLD', dollar_per_war_millions=1.0)
+        with TemporaryDirectory() as temp_dir:
+            self._write_csv(
+                temp_dir,
+                'Team,avg_payroll_M_3yr,avg_batting_war_3yr,avg_pitching_war_3yr,avg_team_war_3yr,n_years,avg_team_war_3yr_safe,dollar_per_war_M,dollar_per_war\n'
+                'WSN,117.0,5.96,2.97,8.93,3,8.93,13.09,13090000\n',
+            )
+
+            call_command('load_team_dollar_per_war', '--replace', base_dir=temp_dir, verbosity=0)
+
+        self.assertFalse(MLBApiTeamDollarPerWar.objects.filter(team='OLD').exists())
+        self.assertEqual(MLBApiTeamDollarPerWar.objects.count(), 1)
+
+    def test_command_updates_existing_team_without_duplicate(self):
+        MLBApiTeamDollarPerWar.objects.create(team='WSN', dollar_per_war_millions=1.0)
+        with TemporaryDirectory() as temp_dir:
+            self._write_csv(
+                temp_dir,
+                'Team,avg_payroll_M_3yr,avg_batting_war_3yr,avg_pitching_war_3yr,avg_team_war_3yr,n_years,avg_team_war_3yr_safe,dollar_per_war_M,dollar_per_war\n'
+                'WSN,117.0,5.96,2.97,8.93,3,8.93,13.09,13090000\n',
+            )
+
+            call_command('load_team_dollar_per_war', base_dir=temp_dir, verbosity=0)
+
+        self.assertEqual(MLBApiTeamDollarPerWar.objects.count(), 1)
+        self.assertEqual(MLBApiTeamDollarPerWar.objects.get(team='WSN').dollar_per_war_millions, 13.09)
+
+    def test_command_errors_when_csv_is_missing(self):
+        with TemporaryDirectory() as temp_dir:
+            with self.assertRaises(CommandError):
+                call_command('load_team_dollar_per_war', base_dir=temp_dir, verbosity=0)
+
+    def test_command_errors_on_missing_team(self):
+        with TemporaryDirectory() as temp_dir:
+            self._write_csv(
+                temp_dir,
+                'Team,avg_payroll_M_3yr,avg_batting_war_3yr,avg_pitching_war_3yr,avg_team_war_3yr,n_years,avg_team_war_3yr_safe,dollar_per_war_M,dollar_per_war\n'
+                ',117.0,5.96,2.97,8.93,3,8.93,13.09,13090000\n',
+            )
+
+            with self.assertRaises(CommandError):
+                call_command('load_team_dollar_per_war', base_dir=temp_dir, verbosity=0)
+
+    def test_command_errors_on_duplicate_team(self):
+        with TemporaryDirectory() as temp_dir:
+            self._write_csv(
+                temp_dir,
+                'Team,avg_payroll_M_3yr,avg_batting_war_3yr,avg_pitching_war_3yr,avg_team_war_3yr,n_years,avg_team_war_3yr_safe,dollar_per_war_M,dollar_per_war\n'
+                'WSN,117.0,5.96,2.97,8.93,3,8.93,13.09,13090000\n'
+                'WSN,118.0,5.96,2.97,8.93,3,8.93,14.09,14090000\n',
+            )
+
+            with self.assertRaises(CommandError):
+                call_command('load_team_dollar_per_war', base_dir=temp_dir, verbosity=0)
 
 
 class TeamApiTests(TestCase):
