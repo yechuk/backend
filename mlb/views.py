@@ -16,6 +16,7 @@ from .models import (
     MLBApiSimilarPlayer,
     MLBApiStatLine,
     MLBApiTeamDollarPerWar,
+    MLBApiWarNext3Prediction,
     MLBPlayer,
     MLBRosterEntry,
     MLBRosterPhoto,
@@ -180,7 +181,29 @@ def _roster_player_detail_url(team_code, player_id, season=None):
     return f'{base_url}?season={season}'
 
 
-def _serialize_stat_player(stat_line):
+def _resolve_war_next3_prediction_for_stat_line(stat_line):
+    if stat_line is None:
+        return None
+
+    player_name_key = _normalize_person_name(stat_line.name_ascii or stat_line.player_name)
+    team = str(stat_line.team or '').strip().upper()
+    if not player_name_key or not team:
+        return None
+
+    return MLBApiWarNext3Prediction.objects.filter(
+        stat_view=stat_line.stat_view,
+        season=stat_line.season,
+        player_name_key=player_name_key,
+        team__iexact=team,
+    ).first()
+
+
+def _add_war_next3_fields(stats, prediction):
+    stats['actual_war_next3_avg'] = prediction.actual_war_next3_avg if prediction is not None else None
+    stats['pred_war_next3_avg'] = prediction.pred_war_next3_avg if prediction is not None else None
+
+
+def _serialize_stat_player(stat_line, include_war_next3=False):
     row = stat_line.raw_stats or {}
     view = stat_line.stat_view
     api_player_id = stat_line.mlbam_id or stat_line.external_player_id
@@ -244,6 +267,9 @@ def _serialize_stat_player(stat_line):
             'launch_angle': _to_float(_stat_value(row, 'LaunchAngle', 'Launch_Angle', 'launch_angle'), None),
             'war': stat_line.war if stat_line.war is not None else _to_float(_stat_value(row, 'WAR', 'war'), None),
         }
+
+    if include_war_next3:
+        _add_war_next3_fields(base['stats'], _resolve_war_next3_prediction_for_stat_line(stat_line))
 
     base['detail_url'] = _player_detail_url(base['team'], api_player_id)
     return base
@@ -387,11 +413,11 @@ def _serialize_roster_entry(entry):
         },
     }
 
-def _serialize_roster_stat_line(stat_line):
+def _serialize_roster_stat_line(stat_line, include_war_next3=False):
     if stat_line is None:
         return None
 
-    payload = _serialize_stat_player(stat_line)
+    payload = _serialize_stat_player(stat_line, include_war_next3=include_war_next3)
     return {
         'source_player_id': payload['player_id'],
         'source_external_player_id': payload['external_player_id'],
@@ -435,7 +461,7 @@ def _roster_player_stat_lines_by_season(entry, requested_player_id):
     return season_map
 
 
-def _build_roster_player_history(entry, requested_player_id, requested_stat_season=None):
+def _build_roster_player_history(entry, requested_player_id, requested_stat_season=None, include_war_next3=False):
     season_map = _roster_player_stat_lines_by_season(entry, requested_player_id)
 
     if requested_stat_season is not None:
@@ -446,8 +472,14 @@ def _build_roster_player_history(entry, requested_player_id, requested_stat_seas
     history = []
     for season in seasons:
         season_bucket = season_map.get(season, {})
-        batting_payload = _serialize_roster_stat_line(season_bucket.get(MLBApiStatLine.VIEW_BATTING))
-        pitching_payload = _serialize_roster_stat_line(season_bucket.get(MLBApiStatLine.VIEW_PITCHING))
+        batting_payload = _serialize_roster_stat_line(
+            season_bucket.get(MLBApiStatLine.VIEW_BATTING),
+            include_war_next3=include_war_next3,
+        )
+        pitching_payload = _serialize_roster_stat_line(
+            season_bucket.get(MLBApiStatLine.VIEW_PITCHING),
+            include_war_next3=include_war_next3,
+        )
         history.append({
             'season': season,
             'batting': batting_payload if _has_meaningful_roster_stats(batting_payload, MLBApiStatLine.VIEW_BATTING) else None,
@@ -892,13 +924,13 @@ def api_team_player_detail(request, team_code, player_id):
             status=404,
         )
 
-    player_payload = _serialize_stat_player(target_line)
+    player_payload = _serialize_stat_player(target_line, include_war_next3=True)
     player_payload['photo_url'] = _resolve_stat_player_photo_url(target_line)
     if requested_season or uses_roster_backed_fallback:
         history = [player_payload]
     else:
         history = [
-            _serialize_stat_player(stat_line)
+            _serialize_stat_player(stat_line, include_war_next3=True)
             for stat_line in _player_history_queryset(view, target_line)[:PLAYER_HISTORY_LIMIT]
         ]
 
@@ -1043,7 +1075,12 @@ def api_roster_player_detail(request, team_code, player_id):
         )
 
     requested_stat_season = _to_int(raw_season, None) if raw_season not in (None, '') else None
-    history = _build_roster_player_history(roster_entry, player_id, requested_stat_season=requested_stat_season)
+    history = _build_roster_player_history(
+        roster_entry,
+        player_id,
+        requested_stat_season=requested_stat_season,
+        include_war_next3=True,
+    )
 
     photo = _find_roster_photo(roster_entry.team_name, roster_entry.player_name)
     current_stats = history[0] if history else {'batting': None, 'pitching': None}

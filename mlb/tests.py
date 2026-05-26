@@ -13,6 +13,7 @@ from .models import (
     MLBApiSimilarPlayer,
     MLBApiStatLine,
     MLBApiTeamDollarPerWar,
+    MLBApiWarNext3Prediction,
     MLBRosterEntry,
     MLBRosterPhoto,
 )
@@ -149,6 +150,346 @@ class LoadTeamDollarPerWarCommandTests(TestCase):
 
             with self.assertRaises(CommandError):
                 call_command('load_team_dollar_per_war', base_dir=temp_dir, verbosity=0)
+
+
+class WarNext3PredictionApiTests(TestCase):
+    def test_team_batting_detail_includes_war_next3_prediction_stats(self):
+        MLBApiStatLine.objects.create(
+            stat_view='batting',
+            season=2022,
+            team='NYY',
+            player_name='Aaron Judge',
+            name_ascii='Aaron Judge',
+            external_player_id='15640',
+            mlbam_id='592450',
+            age=30,
+            war=11.0925474257163,
+            raw_stats={'Season': '2022', 'Name': 'Aaron Judge', 'Team': 'NYY', 'WAR': '11.0925474257163'},
+        )
+        MLBApiWarNext3Prediction.objects.create(
+            stat_view='batting',
+            player_name_key='aaronjudge',
+            player_name='Aaron Judge',
+            name_ascii='Aaron Judge',
+            season=2022,
+            team='NYY',
+            actual_war_next3_avg=8.738020591482876,
+            pred_war_next3_avg=4.271179997434847,
+        )
+
+        response = self.client.get('/api/teams/NYY/players/592450/?season=2022&view=batting')
+
+        self.assertEqual(response.status_code, 200)
+        stats = response.json()['player']['stats']
+        self.assertEqual(stats['actual_war_next3_avg'], 8.738020591482876)
+        self.assertEqual(stats['pred_war_next3_avg'], 4.271179997434847)
+
+    def test_team_pitching_detail_includes_war_next3_prediction_stats(self):
+        MLBApiStatLine.objects.create(
+            stat_view='pitching',
+            season=2022,
+            team='PHI',
+            player_name='Aaron Nola',
+            name_ascii='Aaron Nola',
+            external_player_id='16149',
+            mlbam_id='605400',
+            age=29,
+            war=6.296249866,
+            raw_stats={
+                'Season': '2022',
+                'Name': 'Aaron Nola',
+                'Team': 'PHI',
+                'G': '32',
+                'GS': '32',
+                'IP': '205.0',
+                'WAR': '6.296249866',
+            },
+        )
+        MLBApiWarNext3Prediction.objects.create(
+            stat_view='pitching',
+            player_name_key='aaronnola',
+            player_name='Aaron Nola',
+            name_ascii='Aaron Nola',
+            season=2022,
+            team='PHI',
+            actual_war_next3_avg=2.624369184,
+            pred_war_next3_avg=2.94930958106622,
+        )
+
+        response = self.client.get('/api/teams/PHI/players/605400/?season=2022&view=pitching')
+
+        self.assertEqual(response.status_code, 200)
+        stats = response.json()['player']['stats']
+        self.assertEqual(stats['actual_war_next3_avg'], 2.624369184)
+        self.assertEqual(stats['pred_war_next3_avg'], 2.94930958106622)
+
+    def test_team_detail_returns_null_war_next3_stats_without_prediction_match(self):
+        MLBApiStatLine.objects.create(
+            stat_view='batting',
+            season=2022,
+            team='ATL',
+            player_name='Dansby Swanson',
+            name_ascii='Dansby Swanson',
+            external_player_id='18314',
+            mlbam_id='621020',
+            age=28,
+            war=6.4,
+            raw_stats={'Season': '2022', 'Name': 'Dansby Swanson', 'Team': 'ATL', 'WAR': '6.4'},
+        )
+
+        response = self.client.get('/api/teams/ATL/players/621020/?season=2022&view=batting')
+
+        self.assertEqual(response.status_code, 200)
+        stats = response.json()['player']['stats']
+        self.assertIsNone(stats['actual_war_next3_avg'])
+        self.assertIsNone(stats['pred_war_next3_avg'])
+
+    def test_roster_batting_detail_includes_war_next3_prediction_stats(self):
+        MLBRosterEntry.objects.create(
+            season=2022,
+            team_id=147,
+            team_name='New York Yankees',
+            team_abbreviation='NYY',
+            league_name='American League',
+            division_name='American League East',
+            player_id=592450,
+            player_name='Aaron Judge',
+            player_link='/api/v1/people/592450',
+            jersey_number='99',
+            position_code='9',
+            position_name='Right Fielder',
+            position_type='Outfielder',
+            position_abbreviation='RF',
+            status_code='A',
+            status_description='Active',
+            raw_data={},
+        )
+        MLBApiStatLine.objects.create(
+            stat_view='batting',
+            season=2022,
+            team='NYY',
+            player_name='Aaron Judge',
+            name_ascii='Aaron Judge',
+            external_player_id='15640',
+            mlbam_id='592450',
+            age=30,
+            war=11.0925474257163,
+            raw_stats={'Season': '2022', 'Name': 'Aaron Judge', 'Team': 'NYY', 'WAR': '11.0925474257163'},
+        )
+        MLBApiWarNext3Prediction.objects.create(
+            stat_view='batting',
+            player_name_key='aaronjudge',
+            player_name='Aaron Judge',
+            name_ascii='Aaron Judge',
+            season=2022,
+            team='NYY',
+            actual_war_next3_avg=8.738020591482876,
+            pred_war_next3_avg=4.271179997434847,
+        )
+
+        response = self.client.get('/api/rosters/NYY/players/592450/?season=2022')
+
+        self.assertEqual(response.status_code, 200)
+        stats = response.json()['player']['batting']['stats']
+        self.assertEqual(stats['actual_war_next3_avg'], 8.738020591482876)
+        self.assertEqual(stats['pred_war_next3_avg'], 4.271179997434847)
+
+    def test_roster_pitching_detail_includes_war_next3_prediction_stats(self):
+        MLBRosterEntry.objects.create(
+            season=2022,
+            team_id=143,
+            team_name='Philadelphia Phillies',
+            team_abbreviation='PHI',
+            league_name='National League',
+            division_name='National League East',
+            player_id=605400,
+            player_name='Aaron Nola',
+            player_link='/api/v1/people/605400',
+            jersey_number='27',
+            position_code='1',
+            position_name='Pitcher',
+            position_type='Pitcher',
+            position_abbreviation='P',
+            status_code='A',
+            status_description='Active',
+            raw_data={},
+        )
+        MLBApiStatLine.objects.create(
+            stat_view='pitching',
+            season=2022,
+            team='PHI',
+            player_name='Aaron Nola',
+            name_ascii='Aaron Nola',
+            external_player_id='16149',
+            mlbam_id='605400',
+            age=29,
+            war=6.296249866,
+            raw_stats={
+                'Season': '2022',
+                'Name': 'Aaron Nola',
+                'Team': 'PHI',
+                'G': '32',
+                'GS': '32',
+                'IP': '205.0',
+                'WAR': '6.296249866',
+            },
+        )
+        MLBApiWarNext3Prediction.objects.create(
+            stat_view='pitching',
+            player_name_key='aaronnola',
+            player_name='Aaron Nola',
+            name_ascii='Aaron Nola',
+            season=2022,
+            team='PHI',
+            actual_war_next3_avg=2.624369184,
+            pred_war_next3_avg=2.94930958106622,
+        )
+
+        response = self.client.get('/api/rosters/PHI/players/605400/?season=2022')
+
+        self.assertEqual(response.status_code, 200)
+        stats = response.json()['player']['pitching']['stats']
+        self.assertEqual(stats['actual_war_next3_avg'], 2.624369184)
+        self.assertEqual(stats['pred_war_next3_avg'], 2.94930958106622)
+
+
+class LoadApiWarNext3PredictionsCommandTests(TestCase):
+    def _write_csvs(self, base_dir, batting_body=None, pitching_body=None):
+        data_dir = Path(base_dir) / 'data'
+        data_dir.mkdir(parents=True, exist_ok=True)
+        if batting_body is not None:
+            (data_dir / 'predicted_batting_war_2023_2025.csv').write_text(batting_body, encoding='utf-8')
+        if pitching_body is not None:
+            (data_dir / 'predicted_pitching_war_2023_2025.csv').write_text(pitching_body, encoding='utf-8')
+
+    def test_command_loads_batting_and_pitching_csv_rows_into_db(self):
+        with TemporaryDirectory() as temp_dir:
+            self._write_csvs(
+                temp_dir,
+                batting_body=(
+                    'player_name_key,Name,NameASCII,Season,Team,actual_war_next3_avg,pred_war_next3_avg\n'
+                    'aaronjudge,Aaron Judge,Aaron Judge,2022,NYY,8.738020591482876,4.271179997434847\n'
+                ),
+                pitching_body=(
+                    'player_name_key,Name,NameASCII,Season,Team,actual_WAR_next3_avg,pred_WAR_next3_avg\n'
+                    'aaronnola,Aaron Nola,Aaron Nola,2022,PHI,2.624369184,2.94930958106622\n'
+                ),
+            )
+
+            call_command('load_api_war_next3_predictions', '--replace', base_dir=temp_dir, verbosity=0)
+
+        self.assertEqual(MLBApiWarNext3Prediction.objects.count(), 2)
+        batting = MLBApiWarNext3Prediction.objects.get(stat_view='batting')
+        pitching = MLBApiWarNext3Prediction.objects.get(stat_view='pitching')
+        self.assertEqual(batting.player_name_key, 'aaronjudge')
+        self.assertEqual(batting.actual_war_next3_avg, 8.738020591482876)
+        self.assertEqual(pitching.pred_war_next3_avg, 2.94930958106622)
+
+    def test_command_replace_deletes_existing_rows_before_load(self):
+        MLBApiWarNext3Prediction.objects.create(
+            stat_view='batting',
+            player_name_key='oldplayer',
+            player_name='Old Player',
+            name_ascii='Old Player',
+            season=2022,
+            team='OLD',
+        )
+        with TemporaryDirectory() as temp_dir:
+            self._write_csvs(
+                temp_dir,
+                batting_body=(
+                    'player_name_key,Name,NameASCII,Season,Team,actual_war_next3_avg,pred_war_next3_avg\n'
+                    'aaronjudge,Aaron Judge,Aaron Judge,2022,NYY,8.738020591482876,4.271179997434847\n'
+                ),
+                pitching_body=(
+                    'player_name_key,Name,NameASCII,Season,Team,actual_WAR_next3_avg,pred_WAR_next3_avg\n'
+                    'aaronnola,Aaron Nola,Aaron Nola,2022,PHI,2.624369184,2.94930958106622\n'
+                ),
+            )
+
+            call_command('load_api_war_next3_predictions', '--replace', base_dir=temp_dir, verbosity=0)
+
+        self.assertFalse(MLBApiWarNext3Prediction.objects.filter(player_name_key='oldplayer').exists())
+        self.assertEqual(MLBApiWarNext3Prediction.objects.count(), 2)
+
+    def test_command_updates_existing_prediction_without_duplicate(self):
+        MLBApiWarNext3Prediction.objects.create(
+            stat_view='batting',
+            player_name_key='aaronjudge',
+            player_name='Aaron Judge',
+            name_ascii='Aaron Judge',
+            season=2022,
+            team='NYY',
+            pred_war_next3_avg=1.0,
+        )
+        with TemporaryDirectory() as temp_dir:
+            self._write_csvs(
+                temp_dir,
+                batting_body=(
+                    'player_name_key,Name,NameASCII,Season,Team,actual_war_next3_avg,pred_war_next3_avg\n'
+                    'aaronjudge,Aaron Judge,Aaron Judge,2022,NYY,8.738020591482876,4.271179997434847\n'
+                ),
+                pitching_body=(
+                    'player_name_key,Name,NameASCII,Season,Team,actual_WAR_next3_avg,pred_WAR_next3_avg\n'
+                    'aaronnola,Aaron Nola,Aaron Nola,2022,PHI,2.624369184,2.94930958106622\n'
+                ),
+            )
+
+            call_command('load_api_war_next3_predictions', base_dir=temp_dir, verbosity=0)
+
+        self.assertEqual(MLBApiWarNext3Prediction.objects.filter(player_name_key='aaronjudge').count(), 1)
+        self.assertEqual(
+            MLBApiWarNext3Prediction.objects.get(player_name_key='aaronjudge').pred_war_next3_avg,
+            4.271179997434847,
+        )
+
+    def test_command_errors_when_a_csv_is_missing(self):
+        with TemporaryDirectory() as temp_dir:
+            self._write_csvs(
+                temp_dir,
+                batting_body=(
+                    'player_name_key,Name,NameASCII,Season,Team,actual_war_next3_avg,pred_war_next3_avg\n'
+                    'aaronjudge,Aaron Judge,Aaron Judge,2022,NYY,8.738020591482876,4.271179997434847\n'
+                ),
+            )
+
+            with self.assertRaises(CommandError):
+                call_command('load_api_war_next3_predictions', base_dir=temp_dir, verbosity=0)
+
+    def test_command_errors_on_missing_required_value(self):
+        with TemporaryDirectory() as temp_dir:
+            self._write_csvs(
+                temp_dir,
+                batting_body=(
+                    'player_name_key,Name,NameASCII,Season,Team,actual_war_next3_avg,pred_war_next3_avg\n'
+                    ',Aaron Judge,Aaron Judge,2022,NYY,8.738020591482876,4.271179997434847\n'
+                ),
+                pitching_body=(
+                    'player_name_key,Name,NameASCII,Season,Team,actual_WAR_next3_avg,pred_WAR_next3_avg\n'
+                    'aaronnola,Aaron Nola,Aaron Nola,2022,PHI,2.624369184,2.94930958106622\n'
+                ),
+            )
+
+            with self.assertRaises(CommandError):
+                call_command('load_api_war_next3_predictions', base_dir=temp_dir, verbosity=0)
+
+    def test_command_errors_on_duplicate_prediction_key(self):
+        with TemporaryDirectory() as temp_dir:
+            self._write_csvs(
+                temp_dir,
+                batting_body=(
+                    'player_name_key,Name,NameASCII,Season,Team,actual_war_next3_avg,pred_war_next3_avg\n'
+                    'aaronjudge,Aaron Judge,Aaron Judge,2022,NYY,8.738020591482876,4.271179997434847\n'
+                    'aaronjudge,Aaron Judge,Aaron Judge,2022,NYY,8.0,4.0\n'
+                ),
+                pitching_body=(
+                    'player_name_key,Name,NameASCII,Season,Team,actual_WAR_next3_avg,pred_WAR_next3_avg\n'
+                    'aaronnola,Aaron Nola,Aaron Nola,2022,PHI,2.624369184,2.94930958106622\n'
+                ),
+            )
+
+            with self.assertRaises(CommandError):
+                call_command('load_api_war_next3_predictions', base_dir=temp_dir, verbosity=0)
 
 
 class TeamApiTests(TestCase):

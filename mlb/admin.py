@@ -6,6 +6,7 @@ from .models import (
     MLBApiRecommendedSimilarPlayer,
     MLBApiSimilarPlayer,
     MLBApiTeamDollarPerWar,
+    MLBApiWarNext3Prediction,
     MLBPlayer,
     MLBPlayerPrediction,
     MLBPlayerSeason,
@@ -83,3 +84,10 @@ class MLBApiPerformanceValuePredictionAdmin(admin.ModelAdmin):
 class MLBApiTeamDollarPerWarAdmin(admin.ModelAdmin):
     list_display = ['team', 'dollar_per_war_millions', 'avg_payroll_m_3yr', 'avg_team_war_3yr', 'n_years']
     search_fields = ['team']
+
+
+@admin.register(MLBApiWarNext3Prediction)
+class MLBApiWarNext3PredictionAdmin(admin.ModelAdmin):
+    list_display = ['stat_view', 'season', 'team', 'player_name', 'actual_war_next3_avg', 'pred_war_next3_avg']
+    list_filter = ['stat_view', 'season', 'team']
+    search_fields = ['player_name', 'name_ascii', 'player_name_key']

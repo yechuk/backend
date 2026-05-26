@@ -307,6 +307,30 @@ class MLBApiTeamDollarPerWar(models.Model):
         return f'{self.team} ${self.dollar_per_war_millions}/WAR'
 
 
+class MLBApiWarNext3Prediction(models.Model):
+    """API-facing next-three-year WAR predictions imported from CSV exports."""
+
+    stat_view = models.CharField(max_length=20, choices=MLBApiStatLine.VIEW_CHOICES, db_index=True)
+    player_name_key = models.CharField(max_length=120, db_index=True)
+    player_name = models.CharField(max_length=100)
+    name_ascii = models.CharField(max_length=100, blank=True)
+    season = models.PositiveIntegerField(db_index=True)
+    team = models.CharField(max_length=10, db_index=True)
+    actual_war_next3_avg = models.FloatField(null=True, blank=True)
+    pred_war_next3_avg = models.FloatField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['stat_view', '-season', 'team', 'player_name']
+        unique_together = ['stat_view', 'season', 'player_name_key', 'team']
+        verbose_name = 'MLB API WAR Next 3 Prediction'
+        verbose_name_plural = 'MLB API WAR Next 3 Predictions'
+
+    def __str__(self):
+        return f'{self.stat_view} {self.season} {self.player_name} ({self.team})'
+
+
 class MLBPlayerPrediction(models.Model):
     """선수 예측 데이터 (미래 성적, 적정 가치)"""
 
