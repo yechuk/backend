@@ -611,6 +611,24 @@ def _serialize_fa_2022_analysis(analysis):
         'age': float(analysis.age) if analysis.age is not None else None,
         'age_signal_level': analysis.age_signal_level,
         'age_signal_is_aging_risk': analysis.age_signal_is_aging_risk,
+        'm2_contract_team_millions': (
+            float(analysis.m2_contract_team_millions)
+            if analysis.m2_contract_team_millions is not None else None
+        ),
+        'm2_max_millions': (
+            float(analysis.m2_max_millions) if analysis.m2_max_millions is not None else None
+        ),
+        'm2_max_team': analysis.m2_max_team,
+        'm2_min_millions': (
+            float(analysis.m2_min_millions) if analysis.m2_min_millions is not None else None
+        ),
+        'm2_min_team': analysis.m2_min_team,
+        'team_specificity_level': analysis.team_specificity_level,
+        'team_specificity_dollar_per_war': (
+            float(analysis.team_specificity_dollar_per_war)
+            if analysis.team_specificity_dollar_per_war is not None else None
+        ),
+        'm2_by_team': analysis.m2_by_team,
     }
 
 
