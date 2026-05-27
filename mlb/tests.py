@@ -8,6 +8,7 @@ from openpyxl import Workbook
 
 from .models import (
     MLBApiAavPrediction,
+    MLBApiFa2022Analysis,
     MLBApiPerformanceValuePrediction,
     MLBApiRecommendedSimilarPlayer,
     MLBApiSimilarPlayer,
@@ -1797,6 +1798,310 @@ class LoadApiPerformanceValuesCommandTests(TestCase):
         self.assertEqual(MLBApiPerformanceValuePrediction.objects.count(), 1)
         swanson = MLBApiPerformanceValuePrediction.objects.get(name_ascii='dansbyswanson')
         self.assertEqual(float(swanson.predicted_value_millions), 22.19)
+
+
+class Fa2022AnalysisApiTests(TestCase):
+    def test_team_detail_returns_fa_2022_analysis_for_matching_player(self):
+        MLBApiStatLine.objects.create(
+            stat_view='batting',
+            season=2022,
+            team='HOU',
+            player_name='Carlos Correa',
+            name_ascii='Carlos Correa',
+            external_player_id='14162',
+            mlbam_id='621043',
+            age=27,
+            war=5.0,
+            raw_stats={'Season': '2022', 'Name': 'Carlos Correa', 'Team': 'HOU', 'WAR': '5.0'},
+        )
+        MLBApiFa2022Analysis.objects.create(
+            stat_view='batting',
+            season=2022,
+            player_name='Carlos Correa',
+            name_ascii='carloscorrea',
+            previous_team='HOU',
+            contract_team='MIN',
+            position='SS',
+            is_re_signing=False,
+            predicted_war='4.186',
+            actual_aav_millions='35.10',
+            predicted_aav_millions='21.98',
+            position_scarcity_level='caution',
+            position_scarcity_war_threshold='3.0',
+            position_scarcity_comp_count=2,
+            is_boras=True,
+            age='27.3',
+            age_signal_level='prime_premium',
+            age_signal_is_aging_risk=False,
+        )
+
+        response = self.client.get('/api/teams/HOU/players/621043/?season=2022&view=batting')
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['fa_2022_analysis']['contract_team'], 'MIN')
+        self.assertEqual(payload['fa_2022_analysis']['previous_team'], 'HOU')
+        self.assertEqual(payload['fa_2022_analysis']['position_scarcity_comp_count'], 2)
+        self.assertEqual(payload['fa_2022_analysis']['age_signal_level'], 'prime_premium')
+
+    def test_team_detail_returns_null_fa_2022_analysis_when_season_is_not_2022(self):
+        MLBApiStatLine.objects.create(
+            stat_view='batting',
+            season=2023,
+            team='HOU',
+            player_name='Carlos Correa',
+            name_ascii='Carlos Correa',
+            external_player_id='14162',
+            mlbam_id='621043',
+            age=28,
+            war=4.0,
+            raw_stats={'Season': '2023', 'Name': 'Carlos Correa', 'Team': 'HOU', 'WAR': '4.0'},
+        )
+        MLBApiFa2022Analysis.objects.create(
+            stat_view='batting',
+            season=2022,
+            player_name='Carlos Correa',
+            name_ascii='carloscorrea',
+            previous_team='HOU',
+            contract_team='MIN',
+        )
+
+        response = self.client.get('/api/teams/HOU/players/621043/?season=2023&view=batting')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.json()['fa_2022_analysis'])
+
+    def test_roster_detail_returns_fa_2022_analysis_for_matching_pitcher(self):
+        MLBRosterEntry.objects.create(
+            season=2022,
+            team_id=119,
+            team_name='Los Angeles Dodgers',
+            team_abbreviation='LAD',
+            league_name='National League',
+            division_name='National League West',
+            player_id=453286,
+            player_name='Max Scherzer',
+            player_link='/api/v1/people/453286',
+            jersey_number='31',
+            position_code='1',
+            position_name='Pitcher',
+            position_type='Pitcher',
+            position_abbreviation='P',
+            status_code='A',
+            status_description='Active',
+            raw_data={},
+        )
+        MLBApiStatLine.objects.create(
+            stat_view='pitching',
+            season=2022,
+            team='LAD',
+            player_name='Max Scherzer',
+            name_ascii='Max Scherzer',
+            external_player_id='3137',
+            mlbam_id='453286',
+            age=37,
+            war=2.6,
+            raw_stats={'Season': '2022', 'Name': 'Max Scherzer', 'Team': 'LAD', 'WAR': '2.6'},
+        )
+        MLBApiFa2022Analysis.objects.create(
+            stat_view='pitching',
+            season=2022,
+            player_name='Max Scherzer',
+            name_ascii='maxscherzer',
+            previous_team='LAD',
+            contract_team='NYN',
+            position='SP',
+            is_re_signing=False,
+            predicted_war='2.659',
+            actual_aav_millions='43.33',
+            predicted_aav_millions='40.66',
+            position_scarcity_level='stable',
+            position_scarcity_war_threshold='3.0',
+            position_scarcity_comp_count=0,
+            is_boras=True,
+            age='37.3',
+            age_signal_level='aging_risk',
+            age_signal_is_aging_risk=True,
+        )
+
+        response = self.client.get('/api/rosters/LAD/players/453286/?season=2022')
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['fa_2022_analysis']['view'], 'pitching')
+        self.assertEqual(payload['fa_2022_analysis']['contract_team'], 'NYN')
+        self.assertTrue(payload['fa_2022_analysis']['age_signal_is_aging_risk'])
+
+    def test_team_detail_returns_null_fa_2022_analysis_when_previous_team_does_not_match(self):
+        MLBApiStatLine.objects.create(
+            stat_view='pitching',
+            season=2022,
+            team='TOR',
+            player_name='Robbie Ray',
+            name_ascii='Robbie Ray',
+            external_player_id='11486',
+            mlbam_id='592662',
+            age=30,
+            war=3.0,
+            raw_stats={'Season': '2022', 'Name': 'Robbie Ray', 'Team': 'TOR', 'WAR': '3.0'},
+        )
+        MLBApiFa2022Analysis.objects.create(
+            stat_view='pitching',
+            season=2022,
+            player_name='Robbie Ray',
+            name_ascii='robbieray',
+            previous_team='ARI',
+            contract_team='SEA',
+        )
+
+        response = self.client.get('/api/teams/TOR/players/592662/?season=2022&view=pitching')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.json()['fa_2022_analysis'])
+
+
+class LoadApiFa2022AnalysisCommandTests(TestCase):
+    def _write_workbook(
+        self,
+        base_dir,
+        *,
+        batting_rows=None,
+        pitching_rows=None,
+        batting_headers=None,
+        include_pitching_sheet=True,
+    ):
+        data_dir = Path(base_dir) / 'data'
+        data_dir.mkdir(parents=True, exist_ok=True)
+
+        workbook = Workbook()
+        batting_sheet = workbook.active
+        batting_sheet.title = '타자'
+        pitching_sheet = workbook.create_sheet('투수') if include_pitching_sheet else None
+
+        default_headers = (
+            '선수명',
+            '이전팀',
+            '계약팀',
+            '포지션',
+            '재계약',
+            'pred_WAR',
+            '실제AAV\n($M)',
+            'M1 예측\n($M)',
+            '포지션 희소성',
+            'Boras 여부',
+            '나이 신호',
+        )
+
+        batting_sheet.append(('최종자료', None, None, None, None, None, None, None, None, None, None))
+        batting_sheet.append(('설명', None, None, None, None, None, None, None, None, None, None))
+        batting_sheet.append(batting_headers or default_headers)
+        for row in batting_rows or []:
+            batting_sheet.append(row)
+
+        if pitching_sheet is not None:
+            pitching_sheet.append(('최종자료', None, None, None, None, None, None, None, None, None, None))
+            pitching_sheet.append(('설명', None, None, None, None, None, None, None, None, None, None))
+            pitching_sheet.append(default_headers)
+            for row in pitching_rows or []:
+                pitching_sheet.append(row)
+
+        workbook.save(data_dir / 'FA_2022_최종분석.xlsx')
+
+    def test_command_loads_batting_and_pitching_rows(self):
+        with TemporaryDirectory() as temp_dir:
+            self._write_workbook(
+                temp_dir,
+                batting_rows=[
+                    (
+                        'Carlos Correa', 'HOU', 'MIN', 'SS', '이적', 4.186, 35.1, 21.98,
+                        '주의\n동 포지션 predWAR3.0+ 2명', 'Boras', '전성기 프리미엄\n27.3세',
+                    ),
+                ],
+                pitching_rows=[
+                    (
+                        'Max Scherzer', 'LAD', 'NYN', 'SP', '이적', 2.659, 43.33, 40.66,
+                        '안정\n동 포지션 predWAR3.0+ 0명', 'Boras', '에이징 리스크\n37.3세',
+                    ),
+                ],
+            )
+
+            call_command('load_api_fa_2022_analysis', '--replace', base_dir=str(temp_dir), verbosity=0)
+
+        self.assertEqual(MLBApiFa2022Analysis.objects.count(), 2)
+        batter = MLBApiFa2022Analysis.objects.get(stat_view='batting', name_ascii='carloscorrea')
+        pitcher = MLBApiFa2022Analysis.objects.get(stat_view='pitching', name_ascii='maxscherzer')
+        self.assertEqual(batter.previous_team, 'HOU')
+        self.assertFalse(batter.is_re_signing)
+        self.assertEqual(float(batter.predicted_war), 4.186)
+        self.assertEqual(pitcher.position_scarcity_comp_count, 0)
+        self.assertTrue(pitcher.age_signal_is_aging_risk)
+
+    def test_command_replace_deletes_existing_rows_before_load(self):
+        MLBApiFa2022Analysis.objects.create(
+            stat_view='batting',
+            season=2022,
+            player_name='Old Player',
+            name_ascii='oldplayer',
+            previous_team='OLD',
+        )
+        with TemporaryDirectory() as temp_dir:
+            self._write_workbook(
+                temp_dir,
+                batting_rows=[
+                    (
+                        'Carlos Correa', 'HOU', 'MIN', 'SS', '이적', 4.186, 35.1, 21.98,
+                        '주의\n동 포지션 predWAR3.0+ 2명', 'Boras', '전성기 프리미엄\n27.3세',
+                    ),
+                ],
+                pitching_rows=[],
+            )
+
+            call_command('load_api_fa_2022_analysis', '--replace', base_dir=str(temp_dir), verbosity=0)
+
+        self.assertFalse(MLBApiFa2022Analysis.objects.filter(name_ascii='oldplayer').exists())
+        self.assertEqual(MLBApiFa2022Analysis.objects.count(), 1)
+
+    def test_command_errors_on_missing_sheet(self):
+        with TemporaryDirectory() as temp_dir:
+            self._write_workbook(
+                temp_dir,
+                batting_rows=[],
+                include_pitching_sheet=False,
+            )
+
+            with self.assertRaises(CommandError):
+                call_command('load_api_fa_2022_analysis', base_dir=str(temp_dir), verbosity=0)
+
+    def test_command_errors_on_unexpected_headers(self):
+        with TemporaryDirectory() as temp_dir:
+            self._write_workbook(
+                temp_dir,
+                batting_rows=[],
+                pitching_rows=[],
+                batting_headers=(
+                    '선수명', '이전팀', '계약팀', '포지션', 'WRONG', 'pred_WAR',
+                    '실제AAV\n($M)', 'M1 예측\n($M)', '포지션 희소성', 'Boras 여부', '나이 신호',
+                ),
+            )
+
+            with self.assertRaises(CommandError):
+                call_command('load_api_fa_2022_analysis', base_dir=str(temp_dir), verbosity=0)
+
+    def test_command_errors_on_invalid_text_pattern(self):
+        with TemporaryDirectory() as temp_dir:
+            self._write_workbook(
+                temp_dir,
+                batting_rows=[
+                    (
+                        'Carlos Correa', 'HOU', 'MIN', 'SS', '이적', 4.186, 35.1, 21.98,
+                        '주의\n동 포지션 predWAR3.0+ 2명', 'Boras', '알수없음\n27.3세',
+                    ),
+                ],
+                pitching_rows=[],
+            )
+
+            with self.assertRaises(CommandError):
+                call_command('load_api_fa_2022_analysis', base_dir=str(temp_dir), verbosity=0)
 
 
 class LoadRosterPhotosCommandTests(TestCase):

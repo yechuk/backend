@@ -283,6 +283,40 @@ class MLBApiPerformanceValuePrediction(models.Model):
         return f'{self.source_label} {self.season} {self.player_name} -> {self.target_team}'
 
 
+class MLBApiFa2022Analysis(models.Model):
+    """API-facing 2022 FA analysis rows imported from the final workbook."""
+
+    stat_view = models.CharField(max_length=20, choices=MLBApiStatLine.VIEW_CHOICES, db_index=True)
+    season = models.PositiveIntegerField(db_index=True)
+    player_name = models.CharField(max_length=100)
+    name_ascii = models.CharField(max_length=100, blank=True, db_index=True)
+    previous_team = models.CharField(max_length=10, db_index=True)
+    contract_team = models.CharField(max_length=10, blank=True)
+    position = models.CharField(max_length=20, blank=True)
+    is_re_signing = models.BooleanField(default=False)
+    predicted_war = models.DecimalField(max_digits=8, decimal_places=3, null=True, blank=True)
+    actual_aav_millions = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    predicted_aav_millions = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    position_scarcity_level = models.CharField(max_length=20, blank=True)
+    position_scarcity_war_threshold = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
+    position_scarcity_comp_count = models.PositiveSmallIntegerField(null=True, blank=True)
+    is_boras = models.BooleanField(default=False)
+    age = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
+    age_signal_level = models.CharField(max_length=32, blank=True)
+    age_signal_is_aging_risk = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['stat_view', 'previous_team', 'player_name']
+        unique_together = ['season', 'stat_view', 'name_ascii', 'previous_team']
+        verbose_name = 'MLB API FA 2022 Analysis'
+        verbose_name_plural = 'MLB API FA 2022 Analyses'
+
+    def __str__(self):
+        return f'{self.season} {self.stat_view} {self.player_name} ({self.previous_team})'
+
+
 class MLBApiTeamDollarPerWar(models.Model):
     """Team-level $/WAR rows imported from team_dollar_per_war.csv."""
 

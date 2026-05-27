@@ -11,6 +11,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from .forms import ValuationSettingsForm
 from .models import (
     MLBApiAavPrediction,
+    MLBApiFa2022Analysis,
     MLBApiPerformanceValuePrediction,
     MLBApiRecommendedSimilarPlayer,
     MLBApiStatLine,
@@ -36,6 +37,7 @@ PERFORMANCE_VALUE_SOURCE = 'M2'
 PERFORMANCE_VALUE_SOURCE_FILE = 'M2_WAR_Value_2022_Full.xlsx'
 PERFORMANCE_VALUE_SEASON = 2022
 PERFORMANCE_VALUE_UNIT = 'USD_M'
+FA_2022_ANALYSIS_SEASON = 2022
 
 
 def _normalize_person_name(value):
@@ -567,6 +569,51 @@ def _serialize_api_performance_value_prediction(prediction, stat_view, target_te
     return float(prediction.predicted_value_millions), meta
 
 
+def _resolve_fa_2022_analysis_for_stat_line(stat_line):
+    if stat_line is None or stat_line.season != FA_2022_ANALYSIS_SEASON:
+        return None
+
+    normalized_name = _normalize_person_name(stat_line.name_ascii or stat_line.player_name)
+    previous_team = str(stat_line.team or '').strip().upper()
+    if not normalized_name or not previous_team:
+        return None
+
+    return MLBApiFa2022Analysis.objects.filter(
+        season=FA_2022_ANALYSIS_SEASON,
+        stat_view=stat_line.stat_view,
+        name_ascii=normalized_name,
+        previous_team__iexact=previous_team,
+    ).first()
+
+
+def _serialize_fa_2022_analysis(analysis):
+    if analysis is None:
+        return None
+
+    return {
+        'season': analysis.season,
+        'view': analysis.stat_view,
+        'previous_team': analysis.previous_team,
+        'contract_team': analysis.contract_team,
+        'position': analysis.position,
+        'is_re_signing': analysis.is_re_signing,
+        'predicted_war': float(analysis.predicted_war) if analysis.predicted_war is not None else None,
+        'actual_aav_millions': float(analysis.actual_aav_millions) if analysis.actual_aav_millions is not None else None,
+        'predicted_aav_millions': float(analysis.predicted_aav_millions) if analysis.predicted_aav_millions is not None else None,
+        'position_scarcity_level': analysis.position_scarcity_level,
+        'position_scarcity_war_threshold': (
+            float(analysis.position_scarcity_war_threshold)
+            if analysis.position_scarcity_war_threshold is not None
+            else None
+        ),
+        'position_scarcity_comp_count': analysis.position_scarcity_comp_count,
+        'is_boras': analysis.is_boras,
+        'age': float(analysis.age) if analysis.age is not None else None,
+        'age_signal_level': analysis.age_signal_level,
+        'age_signal_is_aging_risk': analysis.age_signal_is_aging_risk,
+    }
+
+
 def _resolve_roster_detail_aav_prediction(entry, response_season):
     if response_season is None:
         return None
@@ -582,6 +629,46 @@ def _resolve_roster_detail_aav_prediction(entry, response_season):
         .first()
     )
     return _resolve_api_aav_prediction_for_stat_line(batting_line)
+
+
+def _resolve_roster_detail_fa_2022_analysis(entry, response_season):
+    if response_season is None:
+        return None
+
+    stat_lines = list(
+        MLBApiStatLine.objects.filter(
+            season=response_season,
+            mlbam_id=str(entry.player_id),
+        )
+        .exclude(team='')
+        .order_by('-war', 'team', 'player_name')
+    )
+    if not stat_lines:
+        return None
+
+    is_pitcher = (
+        str(entry.position_type or '').strip().lower() == 'pitcher'
+        or str(entry.position_abbreviation or '').strip().upper() == 'P'
+    )
+    preferred_views = (
+        [MLBApiStatLine.VIEW_PITCHING, MLBApiStatLine.VIEW_BATTING]
+        if is_pitcher
+        else [MLBApiStatLine.VIEW_BATTING, MLBApiStatLine.VIEW_PITCHING]
+    )
+    fallback_stat_line = None
+    for view in preferred_views:
+        stat_line = next((line for line in stat_lines if line.stat_view == view), None)
+        if stat_line is None:
+            continue
+        if fallback_stat_line is None:
+            fallback_stat_line = stat_line
+        analysis = _resolve_fa_2022_analysis_for_stat_line(stat_line)
+        if analysis is not None:
+            return analysis
+
+    if fallback_stat_line is None:
+        return None
+    return _resolve_fa_2022_analysis_for_stat_line(fallback_stat_line)
 
 
 def _resolve_roster_detail_performance_value_prediction(entry, response_season, target_team):
@@ -880,6 +967,7 @@ def api_team_player_detail(request, team_code, player_id):
         view,
         team_code,
     )
+    fa_2022_analysis = _serialize_fa_2022_analysis(_resolve_fa_2022_analysis_for_stat_line(target_line))
 
     return JsonResponse({
         'season': season,
@@ -892,6 +980,7 @@ def api_team_player_detail(request, team_code, player_id):
         'predicted_market_value_meta': predicted_market_value_meta,
         'predicted_performance_value': predicted_performance_value,
         'predicted_performance_value_meta': predicted_performance_value_meta,
+        'fa_2022_analysis': fa_2022_analysis,
         'tabnet_similar_players': tabnet_similar_players,
         'history_count': len(history),
         'history': history,
@@ -1045,6 +1134,9 @@ def api_roster_player_detail(request, team_code, player_id):
         performance_view,
         team_code,
     )
+    fa_2022_analysis = _serialize_fa_2022_analysis(
+        _resolve_roster_detail_fa_2022_analysis(roster_entry, response_season)
+    )
 
     return JsonResponse({
         'season': response_season,
@@ -1058,6 +1150,7 @@ def api_roster_player_detail(request, team_code, player_id):
         'predicted_market_value_meta': predicted_market_value_meta,
         'predicted_performance_value': predicted_performance_value,
         'predicted_performance_value_meta': predicted_performance_value_meta,
+        'fa_2022_analysis': fa_2022_analysis,
         'tabnet_similar_players': tabnet_similar_players,
         'history_count': len(history),
         'history': history,
