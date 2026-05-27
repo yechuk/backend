@@ -901,20 +901,6 @@ class TeamApiTests(TestCase):
         self.assertEqual(payload['player']['stats']['exit_velocity'], 89.5)
 
     def test_team_player_detail_endpoint_includes_similar_players(self):
-        MLBApiSimilarPlayer.objects.create(
-            stat_view='pitching',
-            source_player_name='A.J. Minter',
-            source_name_ascii='ajminter',
-            source_mlbam_id='621345',
-            source_external_player_id='18655',
-            similar_player_name='Matthew Boyd',
-            similar_name_ascii='matthewboyd',
-            similar_mlbam_id='571510',
-            similar_external_player_id='15440',
-            similar_team='DET',
-            similarity_score=48,
-            rank=1,
-        )
         MLBApiRecommendedSimilarPlayer.objects.create(
             stat_view='pitching',
             source_player_name='A.J. Minter',
@@ -956,20 +942,14 @@ class TeamApiTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertEqual(len(payload['euclidean_similar_players']), 1)
-        self.assertEqual(payload['euclidean_similar_players'][0]['player_name'], 'Matthew Boyd')
-        self.assertEqual(payload['euclidean_similar_players'][0]['similarity_score'], 48)
-        self.assertEqual(
-            payload['euclidean_similar_players'][0]['teams_detail_url'],
-            '/api/teams/DET/players/571510/?view=pitching',
-        )
         self.assertEqual(len(payload['tabnet_similar_players']), 1)
         self.assertEqual(payload['tabnet_similar_players'][0]['player_name'], 'Joely Rodríguez')
         self.assertAlmostEqual(payload['tabnet_similar_players'][0]['similarity_score'], 0.912345678)
         self.assertEqual(payload['tabnet_similar_players'][0]['position'], 'P')
         self.assertEqual(payload['tabnet_similar_players'][0]['age'], 30)
-        self.assertEqual(payload['similar_players'], payload['euclidean_similar_players'])
-        self.assertEqual(payload['similar_player_recommendations'], payload['tabnet_similar_players'])
+        self.assertNotIn('euclidean_similar_players', payload)
+        self.assertNotIn('similar_players', payload)
+        self.assertNotIn('similar_player_recommendations', payload)
         self.assertIsNone(payload['predicted_aav'])
         self.assertEqual(payload['predicted_aav_meta']['source'], 'M1')
         self.assertFalse(payload['predicted_aav_meta']['available'])
@@ -1359,20 +1339,6 @@ class RosterApiTests(TestCase):
         stat_line.raw_stats['PlayerId'] = '18655'
         stat_line.save(update_fields=['external_player_id', 'raw_stats', 'updated_at'])
 
-        MLBApiSimilarPlayer.objects.create(
-            stat_view='pitching',
-            source_player_name='A.J. Minter',
-            source_name_ascii='ajminter',
-            source_mlbam_id='621345',
-            source_external_player_id='18655',
-            similar_player_name='Joely Rodríguez',
-            similar_name_ascii='joelyrodriguez',
-            similar_mlbam_id='570257',
-            similar_external_player_id='11487',
-            similar_team='NYM',
-            similarity_score=51,
-            rank=1,
-        )
         MLBApiRecommendedSimilarPlayer.objects.create(
             stat_view='pitching',
             source_player_name='A.J. Minter',
@@ -1396,16 +1362,13 @@ class RosterApiTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertEqual(payload['euclidean_similar_players']['batting'], [])
-        self.assertEqual(len(payload['euclidean_similar_players']['pitching']), 1)
-        self.assertEqual(payload['euclidean_similar_players']['pitching'][0]['player_name'], 'Joely Rodríguez')
-        self.assertEqual(payload['euclidean_similar_players']['pitching'][0]['similarity_score'], 51)
         self.assertEqual(payload['tabnet_similar_players']['batting'], [])
         self.assertEqual(len(payload['tabnet_similar_players']['pitching']), 1)
         self.assertEqual(payload['tabnet_similar_players']['pitching'][0]['player_name'], 'Daniel Norris')
         self.assertAlmostEqual(payload['tabnet_similar_players']['pitching'][0]['similarity_score'], 0.87654321)
-        self.assertEqual(payload['similar_players'], payload['euclidean_similar_players'])
-        self.assertEqual(payload['similar_player_recommendations'], payload['tabnet_similar_players'])
+        self.assertNotIn('euclidean_similar_players', payload)
+        self.assertNotIn('similar_players', payload)
+        self.assertNotIn('similar_player_recommendations', payload)
         self.assertIsNone(payload['predicted_aav'])
         self.assertEqual(payload['predicted_aav_meta']['source'], 'M1')
         self.assertFalse(payload['predicted_aav_meta']['available'])

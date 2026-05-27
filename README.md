@@ -69,19 +69,11 @@ heroku run -a <app-name> -- python manage.py load_api_similar_players --replace
 
 ## Similar Player Methods
 
-The player detail APIs expose two different similar-player lists.
+The player detail APIs expose the TabNet-based similar-player list.
 
-- `euclidean_similar_players`
-  Uses the legacy CSVs `data/similar_batters_2018_2022.csv` and `data/similar_pitchers_2018_2022.csv`.
-  This list was built with Euclidean-distance similarity over summary stats.
 - `tabnet_similar_players`
   Uses `data/batters_recommendations.csv` and `data/pitchers_recommendations.csv`.
   This list was built with deep-learning-based representation learning and metric learning.
-
-The current APIs also keep the older aliases for compatibility:
-
-- `similar_players` -> `euclidean_similar_players`
-- `similar_player_recommendations` -> `tabnet_similar_players`
 
 ### TabNet-Based Similarity Pipeline
 

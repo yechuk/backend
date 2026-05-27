@@ -970,21 +970,12 @@ $$
 
 **유사 선수 API와 방법론 구분**
 
-현재 선수 상세 API는 유사 선수 결과를 두 가지 방식으로 함께 제공한다.
+현재 선수 상세 API는 TabNet 기반 유사 선수 결과를 제공한다.
 
-- `euclidean_similar_players`
-  - 기존 방식
-  - 소스 파일: `data/similar_batters_2018_2022.csv`, `data/similar_pitchers_2018_2022.csv`
-  - 계산 방식: 요약 통계 기반 Euclidean distance 유사도
 - `tabnet_similar_players`
   - 신규 방식
   - 소스 파일: `data/batters_recommendations.csv`, `data/pitchers_recommendations.csv`
   - 계산 방식: TabNet 기반 representation learning + metric learning + cosine similarity
-
-하위 호환성을 위해 기존 응답 키는 alias로 유지한다.
-
-- `similar_players` -> `euclidean_similar_players`
-- `similar_player_recommendations` -> `tabnet_similar_players`
 
 **TabNet 기반 유사 선수 추천 파이프라인**
 

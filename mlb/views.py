@@ -13,7 +13,6 @@ from .models import (
     MLBApiAavPrediction,
     MLBApiPerformanceValuePrediction,
     MLBApiRecommendedSimilarPlayer,
-    MLBApiSimilarPlayer,
     MLBApiStatLine,
     MLBApiTeamDollarPerWar,
     MLBApiWarNext3Prediction,
@@ -684,30 +683,6 @@ def _resolve_roster_detail_url_for_mlbam(mlbam_id):
     )
 
 
-def _serialize_similar_player(similar_player):
-    teams_detail_url = None
-    if similar_player.similar_team and similar_player.similar_mlbam_id:
-        teams_detail_url = (
-            f"/api/teams/{similar_player.similar_team}/players/"
-            f"{similar_player.similar_mlbam_id}/?view={similar_player.stat_view}"
-        )
-
-    roster_detail_url = _resolve_roster_detail_url_for_mlbam(similar_player.similar_mlbam_id)
-
-    return {
-        'rank': similar_player.rank,
-        'player_name': similar_player.similar_player_name,
-        'similarity_score': similar_player.similarity_score,
-        'team': similar_player.similar_team or None,
-        'mlbam_id': similar_player.similar_mlbam_id or None,
-        'external_player_id': similar_player.similar_external_player_id or None,
-        'player_id': similar_player.similar_mlbam_id or similar_player.similar_external_player_id or None,
-        'view': similar_player.stat_view,
-        'teams_detail_url': teams_detail_url,
-        'roster_detail_url': roster_detail_url,
-    }
-
-
 def _serialize_recommended_similar_player(similar_player):
     teams_detail_url = None
     if similar_player.similar_team and similar_player.similar_mlbam_id:
@@ -734,18 +709,6 @@ def _serialize_recommended_similar_player(similar_player):
     }
 
 
-def _similar_player_queryset(stat_view, *, mlbam_id=None, external_player_id=None, player_name=None):
-    filters = Q()
-    if mlbam_id:
-        filters |= Q(source_mlbam_id=str(mlbam_id))
-    normalized_name = _normalize_similar_name(player_name)
-    if normalized_name:
-        filters |= Q(source_name_ascii=normalized_name)
-    if not filters:
-        return MLBApiSimilarPlayer.objects.none()
-    return MLBApiSimilarPlayer.objects.filter(stat_view=stat_view).filter(filters).order_by('rank')
-
-
 def _recommended_similar_player_queryset(stat_view, *, mlbam_id=None, external_player_id=None, player_name=None):
     filters = Q()
     if mlbam_id:
@@ -758,18 +721,6 @@ def _recommended_similar_player_queryset(stat_view, *, mlbam_id=None, external_p
     return MLBApiRecommendedSimilarPlayer.objects.filter(stat_view=stat_view).filter(filters).order_by('rank')
 
 
-def _team_detail_similar_players(view, stat_line):
-    player_name = stat_line.name_ascii or stat_line.player_name
-    return [
-        _serialize_similar_player(similar_player)
-        for similar_player in _similar_player_queryset(
-            view,
-            mlbam_id=stat_line.mlbam_id,
-            player_name=player_name,
-        )
-    ]
-
-
 def _team_detail_similar_player_recommendations(view, stat_line):
     player_name = stat_line.name_ascii or stat_line.player_name
     return [
@@ -780,20 +731,6 @@ def _team_detail_similar_player_recommendations(view, stat_line):
             player_name=player_name,
         )
     ]
-
-
-def _roster_detail_similar_players(entry, requested_player_id):
-    similar_players = {}
-    for stat_view in (MLBApiStatLine.VIEW_BATTING, MLBApiStatLine.VIEW_PITCHING):
-        similar_players[stat_view] = [
-            _serialize_similar_player(similar_player)
-            for similar_player in _similar_player_queryset(
-                stat_view,
-                mlbam_id=entry.player_id,
-                player_name=entry.player_name,
-            )
-        ]
-    return similar_players
 
 
 def _roster_detail_similar_player_recommendations(entry, requested_player_id):
@@ -934,7 +871,6 @@ def api_team_player_detail(request, team_code, player_id):
             for stat_line in _player_history_queryset(view, target_line)[:PLAYER_HISTORY_LIMIT]
         ]
 
-    euclidean_similar_players = _team_detail_similar_players(view, target_line)
     tabnet_similar_players = _team_detail_similar_player_recommendations(view, target_line)
     aav_prediction = _resolve_api_aav_prediction_for_stat_line(target_line)
     predicted_aav, predicted_aav_meta = _serialize_api_aav_prediction(aav_prediction)
@@ -956,10 +892,7 @@ def api_team_player_detail(request, team_code, player_id):
         'predicted_market_value_meta': predicted_market_value_meta,
         'predicted_performance_value': predicted_performance_value,
         'predicted_performance_value_meta': predicted_performance_value_meta,
-        'euclidean_similar_players': euclidean_similar_players,
         'tabnet_similar_players': tabnet_similar_players,
-        'similar_players': euclidean_similar_players,
-        'similar_player_recommendations': tabnet_similar_players,
         'history_count': len(history),
         'history': history,
     })
@@ -1098,7 +1031,6 @@ def api_roster_player_detail(request, team_code, player_id):
     if response_season is None and history:
         response_season = history[0]['season']
 
-    euclidean_similar_players = _roster_detail_similar_players(roster_entry, player_id)
     tabnet_similar_players = _roster_detail_similar_player_recommendations(roster_entry, player_id)
     aav_prediction = _resolve_roster_detail_aav_prediction(roster_entry, response_season)
     predicted_aav, predicted_aav_meta = _serialize_api_aav_prediction(aav_prediction)
@@ -1126,10 +1058,7 @@ def api_roster_player_detail(request, team_code, player_id):
         'predicted_market_value_meta': predicted_market_value_meta,
         'predicted_performance_value': predicted_performance_value,
         'predicted_performance_value_meta': predicted_performance_value_meta,
-        'euclidean_similar_players': euclidean_similar_players,
         'tabnet_similar_players': tabnet_similar_players,
-        'similar_players': euclidean_similar_players,
-        'similar_player_recommendations': tabnet_similar_players,
         'history_count': len(history),
         'history': history,
     })
