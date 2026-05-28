@@ -485,7 +485,7 @@ def _build_roster_player_history(entry, requested_player_id, requested_stat_seas
 def _resolve_api_aav_prediction_for_stat_line(stat_line):
     if stat_line is None:
         return None
-    if stat_line.stat_view != MLBApiStatLine.VIEW_BATTING or stat_line.season != AAV_PREDICTION_SEASON:
+    if stat_line.season != AAV_PREDICTION_SEASON:
         return None
 
     normalized_name = _normalize_person_name(stat_line.name_ascii or stat_line.player_name)
@@ -494,7 +494,7 @@ def _resolve_api_aav_prediction_for_stat_line(stat_line):
 
     return MLBApiAavPrediction.objects.filter(
         season=AAV_PREDICTION_SEASON,
-        stat_view=MLBApiStatLine.VIEW_BATTING,
+        stat_view=stat_line.stat_view,
         name_ascii=normalized_name,
     ).first()
 
@@ -502,9 +502,9 @@ def _resolve_api_aav_prediction_for_stat_line(stat_line):
 def _serialize_api_aav_prediction(prediction):
     meta = {
         'source': AAV_PREDICTION_SOURCE,
-        'source_file': AAV_PREDICTION_SOURCE_FILE,
+        'source_file': prediction.source_file if prediction else AAV_PREDICTION_SOURCE_FILE,
         'season': AAV_PREDICTION_SEASON,
-        'view': MLBApiStatLine.VIEW_BATTING,
+        'view': prediction.stat_view if prediction else MLBApiStatLine.VIEW_BATTING,
         'unit': AAV_PREDICTION_UNIT,
         'available': prediction is not None and prediction.predicted_aav_millions is not None,
     }
