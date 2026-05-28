@@ -118,4 +118,10 @@ class Command(BaseCommand):
             self.stdout.write(f'Parsed {count} rows from "{sheet_name}" sheet.')
 
         workbook.close()
-        return objects
+
+        # Deduplicate by (season, stat_view, name_ascii) — last entry wins within each sheet
+        seen = {}
+        for obj in objects:
+            key = (obj.season, obj.stat_view, obj.name_ascii)
+            seen[key] = obj
+        return list(seen.values())
