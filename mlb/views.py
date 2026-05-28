@@ -347,18 +347,10 @@ def _resolve_stat_player_photo_url(stat_line):
     except (TypeError, ValueError):
         return None
 
-    roster_entry = MLBRosterEntry.objects.filter(player_id=mlbam_id).order_by('-season').first()
-    if roster_entry is None:
-        return None
-
-    photo = _find_roster_photo(roster_entry.team_name, roster_entry.player_name)
-    if photo is None:
-        return None
-
-    return _roster_player_photo_url(
-        roster_entry.team_abbreviation,
-        roster_entry.player_id,
-        season=roster_entry.season,
+    return (
+        f'https://img.mlbstatic.com/mlb-photos/image/upload/'
+        f'd_people:generic:headshot:67:current.png/w_213,q_auto:best/'
+        f'v1/people/{mlbam_id}/headshot/67/current'
     )
 
 
@@ -536,8 +528,6 @@ def _serialize_api_market_value_prediction(prediction):
 
 def _resolve_api_performance_value_for_stat_line(stat_line, target_team):
     if stat_line is None:
-        return None
-    if stat_line.season != PERFORMANCE_VALUE_SEASON:
         return None
 
     normalized_name = _normalize_person_name(stat_line.name_ascii or stat_line.player_name)
