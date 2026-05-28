@@ -1975,8 +1975,8 @@ class LoadApiFa2022AnalysisCommandTests(TestCase):
 
         workbook = Workbook()
         batting_sheet = workbook.active
-        batting_sheet.title = '타자'
-        pitching_sheet = workbook.create_sheet('투수') if include_pitching_sheet else None
+        batting_sheet.title = '타자_메인'
+        pitching_sheet = workbook.create_sheet('투수_메인') if include_pitching_sheet else None
 
         default_headers = (
             '선수명',
@@ -1984,12 +1984,19 @@ class LoadApiFa2022AnalysisCommandTests(TestCase):
             '계약팀',
             '포지션',
             '재계약',
+            '나이',
             'pred_WAR',
             '실제AAV\n($M)',
             'M1 예측\n($M)',
+            'M2\n계약팀',
+            'M2\n최대값',
+            'M2\n최대팀',
+            'M2\n최소값',
+            'M2\n최소팀',
             '포지션 희소성',
             'Boras 여부',
             '나이 신호',
+            '팀 특수성',
         )
 
         batting_sheet.append(('최종자료', None, None, None, None, None, None, None, None, None, None))
@@ -2005,7 +2012,7 @@ class LoadApiFa2022AnalysisCommandTests(TestCase):
             for row in pitching_rows or []:
                 pitching_sheet.append(row)
 
-        workbook.save(data_dir / 'FA_2022_최종분석.xlsx')
+        workbook.save(data_dir / 'FA_2022_최종분석_v3.xlsx')
 
     def test_command_loads_batting_and_pitching_rows(self):
         with TemporaryDirectory() as temp_dir:
@@ -2013,14 +2020,16 @@ class LoadApiFa2022AnalysisCommandTests(TestCase):
                 temp_dir,
                 batting_rows=[
                     (
-                        'Carlos Correa', 'HOU', 'MIN', 'SS', '이적', 4.186, 35.1, 21.98,
-                        '주의\n동 포지션 predWAR3.0+ 2명', 'Boras', '전성기 프리미엄\n27.3세',
+                        'Carlos Correa', 'HOU', 'MIN', 'SS', '이적', 27.3, 4.186, 35.1, 21.98,
+                        22.50, 40.00, 'NYM', 18.00, 'LAD',
+                        '주의\n동 포지션 predWAR3.0+ 2명', 'Boras', '전성기 프리미엄\n27.3세', '데이터없음',
                     ),
                 ],
                 pitching_rows=[
                     (
-                        'Max Scherzer', 'LAD', 'NYN', 'SP', '이적', 2.659, 43.33, 40.66,
-                        '안정\n동 포지션 predWAR3.0+ 0명', 'Boras', '에이징 리스크\n37.3세',
+                        'Max Scherzer', 'LAD', 'NYN', 'SP', '이적', 37.3, 2.659, 43.33, 40.66,
+                        41.00, 50.00, 'BOS', 35.00, 'PIT',
+                        '안정\n동 포지션 predWAR3.0+ 0명', 'Boras', '에이징 리스크\n37.3세', '데이터없음',
                     ),
                 ],
             )
@@ -2049,8 +2058,9 @@ class LoadApiFa2022AnalysisCommandTests(TestCase):
                 temp_dir,
                 batting_rows=[
                     (
-                        'Carlos Correa', 'HOU', 'MIN', 'SS', '이적', 4.186, 35.1, 21.98,
-                        '주의\n동 포지션 predWAR3.0+ 2명', 'Boras', '전성기 프리미엄\n27.3세',
+                        'Carlos Correa', 'HOU', 'MIN', 'SS', '이적', 27.3, 4.186, 35.1, 21.98,
+                        22.50, 40.00, 'NYM', 18.00, 'LAD',
+                        '주의\n동 포지션 predWAR3.0+ 2명', 'Boras', '전성기 프리미엄\n27.3세', '데이터없음',
                     ),
                 ],
                 pitching_rows=[],
@@ -2079,8 +2089,9 @@ class LoadApiFa2022AnalysisCommandTests(TestCase):
                 batting_rows=[],
                 pitching_rows=[],
                 batting_headers=(
-                    '선수명', '이전팀', '계약팀', '포지션', 'WRONG', 'pred_WAR',
-                    '실제AAV\n($M)', 'M1 예측\n($M)', '포지션 희소성', 'Boras 여부', '나이 신호',
+                    '선수명', '이전팀', '계약팀', '포지션', 'WRONG', '나이', 'pred_WAR',
+                    '실제AAV\n($M)', 'M1 예측\n($M)', 'M2\n계약팀', 'M2\n최대값', 'M2\n최대팀',
+                    'M2\n최소값', 'M2\n최소팀', '포지션 희소성', 'Boras 여부', '나이 신호', '팀 특수성',
                 ),
             )
 
@@ -2093,8 +2104,9 @@ class LoadApiFa2022AnalysisCommandTests(TestCase):
                 temp_dir,
                 batting_rows=[
                     (
-                        'Carlos Correa', 'HOU', 'MIN', 'SS', '이적', 4.186, 35.1, 21.98,
-                        '주의\n동 포지션 predWAR3.0+ 2명', 'Boras', '알수없음\n27.3세',
+                        'Carlos Correa', 'HOU', 'MIN', 'SS', '이적', 27.3, 4.186, 35.1, 21.98,
+                        22.50, 40.00, 'NYM', 18.00, 'LAD',
+                        '주의\n동 포지션 predWAR3.0+ 2명', 'Boras', '알수없음\n27.3세', '데이터없음',
                     ),
                 ],
                 pitching_rows=[],
