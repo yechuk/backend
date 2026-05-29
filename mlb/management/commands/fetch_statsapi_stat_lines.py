@@ -151,8 +151,15 @@ class Command(BaseCommand):
         to_create = []
 
         for idx, mlbam_id in enumerate(mlbam_ids, 1):
-            player_name = None
-            name_ascii = None
+            # Fetch player bio to get name (splits don't include player info)
+            try:
+                bio_data = _fetch_json(f'{STATSAPI_BASE}/people/{mlbam_id}')
+                person = bio_data.get('people', [{}])[0]
+                player_name = person.get('fullName', '')
+                name_ascii = _normalize_name(player_name)
+            except Exception:
+                player_name = ''
+                name_ascii = ''
 
             for group, stat_view, fill_map, adv_fill_map in [
                 ('pitching', MLBApiStatLine.VIEW_PITCHING, PITCHING_FILL_MAP, PITCHING_ADV_FILL_MAP),
@@ -167,12 +174,6 @@ class Command(BaseCommand):
                     season_str = str(split.get('season', ''))
                     if not season_str:
                         continue
-
-                    # extract player identity on first pass
-                    person = split.get('player', {})
-                    if not player_name and person.get('fullName'):
-                        player_name = person['fullName']
-                        name_ascii = _normalize_name(player_name)
 
                     api_stat = split.get('stat', {})
                     team_id = split.get('team', {}).get('id')
