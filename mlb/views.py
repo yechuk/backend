@@ -69,6 +69,16 @@ def _to_int(value, default=0):
         return default
 
 
+def _int_mlbam_id(value):
+    """'595879.0' 같은 float 문자열 mlbam_id를 '595879' 형태로 정규화한다."""
+    if not value:
+        return value
+    try:
+        return str(int(float(value)))
+    except (TypeError, ValueError):
+        return value
+
+
 def _to_float(value, default=0.0):
     try:
         return float(value)
@@ -494,8 +504,6 @@ def _build_roster_player_history(entry, requested_player_id, requested_stat_seas
 def _resolve_api_aav_prediction_for_stat_line(stat_line):
     if stat_line is None:
         return None
-    if stat_line.season != AAV_PREDICTION_SEASON:
-        return None
 
     normalized_name = _normalize_person_name(stat_line.name_ascii or stat_line.player_name)
     if not normalized_name:
@@ -782,7 +790,7 @@ def _find_roster_photo(team_name, player_name, photo_map=None):
 def _resolve_roster_detail_url_for_mlbam(mlbam_id):
     if not mlbam_id:
         return None
-    roster_entry = MLBRosterEntry.objects.filter(player_id=mlbam_id).order_by('-season').first()
+    roster_entry = MLBRosterEntry.objects.filter(player_id=_int_mlbam_id(mlbam_id)).order_by('-season').first()
     if roster_entry is None:
         return None
     return _roster_player_detail_url(
@@ -793,23 +801,24 @@ def _resolve_roster_detail_url_for_mlbam(mlbam_id):
 
 
 def _serialize_recommended_similar_player(similar_player):
+    clean_mlbam_id = _int_mlbam_id(similar_player.similar_mlbam_id)
     teams_detail_url = None
-    if similar_player.similar_team and similar_player.similar_mlbam_id:
+    if similar_player.similar_team and clean_mlbam_id:
         teams_detail_url = (
             f"/api/teams/{similar_player.similar_team}/players/"
-            f"{similar_player.similar_mlbam_id}/?view={similar_player.stat_view}"
+            f"{clean_mlbam_id}/?view={similar_player.stat_view}"
         )
 
-    roster_detail_url = _resolve_roster_detail_url_for_mlbam(similar_player.similar_mlbam_id)
+    roster_detail_url = _resolve_roster_detail_url_for_mlbam(clean_mlbam_id)
 
     return {
         'rank': similar_player.rank,
         'player_name': similar_player.similar_player_name,
         'similarity_score': float(similar_player.similarity_score),
         'team': similar_player.similar_team or None,
-        'mlbam_id': similar_player.similar_mlbam_id or None,
+        'mlbam_id': clean_mlbam_id or None,
         'external_player_id': similar_player.similar_external_player_id or None,
-        'player_id': similar_player.similar_mlbam_id or similar_player.similar_external_player_id or None,
+        'player_id': clean_mlbam_id or similar_player.similar_external_player_id or None,
         'view': similar_player.stat_view,
         'position': similar_player.similar_player_position or None,
         'age': similar_player.similar_player_age,
