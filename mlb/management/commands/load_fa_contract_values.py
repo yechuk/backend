@@ -105,6 +105,8 @@ class Command(BaseCommand):
                 if not na:
                     continue
 
+                if year_int >= 2022:  # 플랫폼 현재 시점은 2022년이므로 그 이전 계약만 사용
+                    continue
                 existing = best.get(na)
                 if existing is None or year_int > existing[0]:
                     best[na] = (year_int, aav_millions)
