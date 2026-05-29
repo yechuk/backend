@@ -576,9 +576,16 @@ def _resolve_fa_2022_analysis_for_stat_line(stat_line):
     if not normalized_name:
         return None
 
-    return MLBApiFa2022Analysis.objects.filter(
+    result = MLBApiFa2022Analysis.objects.filter(
         season=FA_2022_ANALYSIS_SEASON,
         stat_view=stat_line.stat_view,
+        name_ascii=normalized_name,
+    ).first()
+    if result is not None:
+        return result
+    # Fallback: pitcher queried via batting view (or vice versa)
+    return MLBApiFa2022Analysis.objects.filter(
+        season=FA_2022_ANALYSIS_SEASON,
         name_ascii=normalized_name,
     ).first()
 
