@@ -172,7 +172,7 @@ class Command(BaseCommand):
 
                 for split in splits:
                     season_str = str(split.get('season', ''))
-                    if not season_str:
+                    if not season_str or int(season_str) > 2022:
                         continue
 
                     api_stat = split.get('stat', {})
