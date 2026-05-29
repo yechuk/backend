@@ -1505,16 +1505,6 @@ class LoadApiSimilarPlayersCommandTests(TestCase):
             data_dir = Path(temp_dir) / 'data'
             data_dir.mkdir(parents=True, exist_ok=True)
 
-            (data_dir / 'similar_batters_2018_2022.csv').write_text(
-                'name,rank_1_name,rank_1_similarity_score,rank_2_name,rank_2_similarity_score,rank_3_name,rank_3_similarity_score\n'
-                'Dansby Swanson,Francisco Lindor,80,Carlos Correa,78,Trea Turner,75\n',
-                encoding='utf-8',
-            )
-            (data_dir / 'similar_pitchers_2018_2022.csv').write_text(
-                'name,rank_1_name,rank_1_similarity_score,rank_2_name,rank_2_similarity_score,rank_3_name,rank_3_similarity_score\n'
-                'A.J. Minter,Matthew Boyd,48,Joely Rodriguez,46,Daniel Norris,44\n',
-                encoding='utf-8',
-            )
             (data_dir / 'batters_recommendations.csv').write_text(
                 'query_player_id,query_name,query_position,query_age,rec_1_player_id,rec_1_name,rec_1_position,rec_1_age,rec_1_similarity,rec_2_player_id,rec_2_name,rec_2_position,rec_2_age,rec_2_similarity,rec_3_player_id,rec_3_name,rec_3_position,rec_3_age,rec_3_similarity\n'
                 '621020,Dansby Swanson,SS,28,596019,Francisco Lindor,SS,28,0.812345678,622491,Carlos Correa,SS,28,0.801234567,607208,Trea Turner,SS,29,0.792345678\n',
@@ -1625,10 +1615,8 @@ class LoadApiSimilarPlayersCommandTests(TestCase):
 
             call_command('load_api_similar_players', '--replace', base_dir=str(temp_dir), verbosity=0)
 
-        self.assertEqual(MLBApiSimilarPlayer.objects.count(), 6)
+        self.assertEqual(MLBApiSimilarPlayer.objects.count(), 0)
         self.assertEqual(MLBApiRecommendedSimilarPlayer.objects.count(), 6)
-        pitcher_similar = MLBApiSimilarPlayer.objects.get(stat_view='pitching', source_name_ascii='ajminter', rank=1)
-        batter_similar = MLBApiSimilarPlayer.objects.get(stat_view='batting', source_name_ascii='dansbyswanson', rank=1)
         pitcher_recommendation = MLBApiRecommendedSimilarPlayer.objects.get(
             stat_view='pitching',
             source_name_ascii='ajminter',
@@ -1639,10 +1627,7 @@ class LoadApiSimilarPlayersCommandTests(TestCase):
             source_name_ascii='dansbyswanson',
             rank=1,
         )
-        self.assertEqual(pitcher_similar.source_mlbam_id, '621345')
-        self.assertEqual(pitcher_similar.similar_external_player_id, '15440')
-        self.assertEqual(batter_similar.similar_mlbam_id, '596019')
-        self.assertEqual(batter_similar.similarity_score, 80)
+        self.assertEqual(pitcher_recommendation.source_mlbam_id, '621345')
         self.assertEqual(pitcher_recommendation.similar_external_player_id, '15440')
         self.assertEqual(pitcher_recommendation.similar_player_position, 'P')
         self.assertEqual(pitcher_recommendation.similar_player_age, 31)

@@ -16,12 +16,8 @@ def _normalize_name(value):
 
 
 class Command(BaseCommand):
-    help = 'Load legacy and recommendation-based batting/pitching similar player CSVs into API tables.'
+    help = 'Load recommendation-based batting/pitching similar player CSVs into API tables.'
 
-    LEGACY_CSV_MAP = {
-        MLBApiStatLine.VIEW_BATTING: 'similar_batters_2018_2022.csv',
-        MLBApiStatLine.VIEW_PITCHING: 'similar_pitchers_2018_2022.csv',
-    }
     RECOMMENDATION_CSV_MAP = {
         MLBApiStatLine.VIEW_BATTING: 'batters_recommendations.csv',
         MLBApiStatLine.VIEW_PITCHING: 'pitchers_recommendations.csv',
@@ -52,15 +48,8 @@ class Command(BaseCommand):
 
         stat_line_lookups = {
             stat_view: self._build_stat_line_lookups(stat_view)
-            for stat_view in self.LEGACY_CSV_MAP
+            for stat_view in self.RECOMMENDATION_CSV_MAP
         }
-
-        legacy_objects = []
-        for stat_view, filename in self.LEGACY_CSV_MAP.items():
-            csv_path = data_dir / filename
-            if not csv_path.exists():
-                raise CommandError(f'Similar-player CSV not found: {csv_path}')
-            legacy_objects.extend(self._load_legacy_csv(csv_path, stat_view, stat_line_lookups[stat_view]))
 
         recommendation_objects = []
         for stat_view, filename in self.RECOMMENDATION_CSV_MAP.items():
@@ -72,25 +61,6 @@ class Command(BaseCommand):
             )
 
         with transaction.atomic():
-            if legacy_objects:
-                MLBApiSimilarPlayer.objects.bulk_create(
-                    legacy_objects,
-                    batch_size=500,
-                    update_conflicts=True,
-                    unique_fields=['stat_view', 'source_name_ascii', 'rank'],
-                    update_fields=[
-                        'source_player_name',
-                        'source_mlbam_id',
-                        'source_external_player_id',
-                        'similar_player_name',
-                        'similar_name_ascii',
-                        'similar_mlbam_id',
-                        'similar_external_player_id',
-                        'similar_team',
-                        'similarity_score',
-                        'updated_at',
-                    ],
-                )
             if recommendation_objects:
                 MLBApiRecommendedSimilarPlayer.objects.bulk_create(
                     recommendation_objects,
@@ -117,46 +87,9 @@ class Command(BaseCommand):
 
         self.stdout.write(
             self.style.SUCCESS(
-                f'Loaded or updated {len(legacy_objects)} legacy rows and '
-                f'{len(recommendation_objects)} recommendation rows.'
+                f'Loaded or updated {len(recommendation_objects)} recommendation rows.'
             )
         )
-
-    def _load_legacy_csv(self, path, stat_view, stat_line_lookups):
-        with path.open('r', encoding='utf-8-sig', newline='') as handle:
-            reader = csv.DictReader(handle)
-            objects = []
-            for row in reader:
-                source_name = (row.get('name') or '').strip()
-                if not source_name:
-                    continue
-
-                source_line = stat_line_lookups['by_name'].get(_normalize_name(source_name))
-                source_ascii = _normalize_name(source_name)
-                for rank in (1, 2, 3):
-                    similar_name = (row.get(f'rank_{rank}_name') or '').strip()
-                    score_text = (row.get(f'rank_{rank}_similarity_score') or '').strip()
-                    if not similar_name or not score_text:
-                        continue
-
-                    similar_line = stat_line_lookups['by_name'].get(_normalize_name(similar_name))
-                    objects.append(
-                        MLBApiSimilarPlayer(
-                            stat_view=stat_view,
-                            source_player_name=source_name,
-                            source_name_ascii=source_ascii,
-                            source_mlbam_id=(source_line.mlbam_id if source_line else ''),
-                            source_external_player_id=(source_line.external_player_id if source_line else ''),
-                            similar_player_name=similar_name,
-                            similar_name_ascii=_normalize_name(similar_name),
-                            similar_mlbam_id=(similar_line.mlbam_id if similar_line else ''),
-                            similar_external_player_id=(similar_line.external_player_id if similar_line else ''),
-                            similar_team=(similar_line.team if similar_line else ''),
-                            similarity_score=int(float(score_text)),
-                            rank=rank,
-                        )
-                    )
-        return objects
 
     def _load_recommendation_csv(self, path, stat_view, stat_line_lookups):
         with path.open('r', encoding='utf-8-sig', newline='') as handle:
