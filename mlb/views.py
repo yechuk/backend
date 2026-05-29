@@ -225,7 +225,7 @@ def _serialize_stat_player(stat_line, include_war_next3=False):
         'bats': _stat_value(row, 'Bats', 'bats'),
         'throws': _stat_value(row, 'Throws', 'throws'),
         'debut_year': _to_int(_stat_value(row, 'DebutYear', 'debut_year'), None),
-        'contract_value': _to_float(_stat_value(row, 'ContractValue', 'contract_value'), None),
+        'aav': _to_float(_stat_value(row, 'ContractValue', 'contract_value'), None),
     }
 
     if view == 'pitching':
