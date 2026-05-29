@@ -140,6 +140,8 @@ def _resolve_stat_season(view, raw_season):
     requested = _to_int(raw_season, 0)
     if requested in seasons:
         return requested
+    if AAV_PREDICTION_SEASON in seasons:
+        return AAV_PREDICTION_SEASON
     return seasons[0]
 
 
@@ -503,6 +505,8 @@ def _build_roster_player_history(entry, requested_player_id, requested_stat_seas
 
 def _resolve_api_aav_prediction_for_stat_line(stat_line):
     if stat_line is None:
+        return None
+    if stat_line.season != AAV_PREDICTION_SEASON:
         return None
 
     normalized_name = _normalize_person_name(stat_line.name_ascii or stat_line.player_name)
@@ -958,17 +962,18 @@ def api_team_player_detail(request, team_code, player_id):
         target_line = _filter_stat_lines(view, season, team_code=team_code).filter(player_identity).first()
         roster_backed_line = _resolve_roster_backed_stat_line(view, team_code, player_id, season=season)
     else:
+        season = _resolve_stat_season(view, None)
         target_line = (
-            _filter_stat_lines(view, None, team_code=team_code)
+            _filter_stat_lines(view, season, team_code=team_code)
             .filter(player_identity)
-            .order_by('-season', '-war', 'player_name')
+            .order_by('-war', 'player_name')
             .first()
         )
         roster_backed_line = _resolve_roster_backed_stat_line(view, team_code, player_id)
         if _should_prefer_roster_backed_stat_line(roster_backed_line, target_line, requested_season):
             target_line = roster_backed_line
             uses_roster_backed_fallback = True
-        season = target_line.season if target_line is not None else _resolve_stat_season(view, None)
+            season = target_line.season
     if requested_season and _should_prefer_roster_backed_stat_line(roster_backed_line, target_line, requested_season):
         target_line = roster_backed_line
         uses_roster_backed_fallback = True
