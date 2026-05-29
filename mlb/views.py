@@ -573,15 +573,13 @@ def _resolve_fa_2022_analysis_for_stat_line(stat_line):
         return None
 
     normalized_name = _normalize_person_name(stat_line.name_ascii or stat_line.player_name)
-    previous_team = str(stat_line.team or '').strip().upper()
-    if not normalized_name or not previous_team:
+    if not normalized_name:
         return None
 
     return MLBApiFa2022Analysis.objects.filter(
         season=FA_2022_ANALYSIS_SEASON,
         stat_view=stat_line.stat_view,
         name_ascii=normalized_name,
-        previous_team__iexact=previous_team,
     ).first()
 
 
