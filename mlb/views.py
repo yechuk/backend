@@ -349,9 +349,12 @@ def _resolve_stat_player_photo_url(stat_line):
 
     normalized = _normalize_person_name(stat_line.player_name)
     if normalized and MLBRosterPhoto.objects.filter(normalized_player_name=normalized).exists():
-        team = str(stat_line.team or '').strip().upper()
-        season_qs = f'?season={stat_line.season}' if stat_line.season else ''
-        return f'/api/rosters/{team}/players/{mlbam_id}/photo/{season_qs}'
+        entry = MLBRosterEntry.objects.filter(
+            player_id=mlbam_id,
+            season=stat_line.season,
+        ).first()
+        if entry:
+            return f'/api/rosters/{entry.team_abbreviation}/players/{mlbam_id}/photo/?season={entry.season}'
 
     return (
         f'https://img.mlbstatic.com/mlb-photos/image/upload/'
