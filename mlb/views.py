@@ -996,7 +996,6 @@ def api_team_player_detail(request, team_code, player_id):
 
     tabnet_similar_players = _team_detail_similar_player_recommendations(view, target_line)
     aav_prediction = _resolve_api_aav_prediction_for_stat_line(target_line)
-    predicted_aav, predicted_aav_meta = _serialize_api_aav_prediction(aav_prediction)
     predicted_market_value, predicted_market_value_meta = _serialize_api_market_value_prediction(aav_prediction)
     predicted_performance_value, predicted_performance_value_meta = _serialize_api_performance_value_prediction(
         _resolve_api_performance_value_for_stat_line(target_line, team_code),
@@ -1010,8 +1009,6 @@ def api_team_player_detail(request, team_code, player_id):
         'view': view,
         'team': team_code.upper(),
         'player': player_payload,
-        'predicted_aav': predicted_aav,
-        'predicted_aav_meta': predicted_aav_meta,
         'predicted_market_value': predicted_market_value,
         'predicted_market_value_meta': predicted_market_value_meta,
         'predicted_performance_value': predicted_performance_value,
@@ -1158,7 +1155,6 @@ def api_roster_player_detail(request, team_code, player_id):
 
     tabnet_similar_players = _roster_detail_similar_player_recommendations(roster_entry, player_id)
     aav_prediction = _resolve_roster_detail_aav_prediction(roster_entry, response_season)
-    predicted_aav, predicted_aav_meta = _serialize_api_aav_prediction(aav_prediction)
     predicted_market_value, predicted_market_value_meta = _serialize_api_market_value_prediction(aav_prediction)
     performance_prediction, performance_view = _resolve_roster_detail_performance_value_prediction(
         roster_entry,
@@ -1180,8 +1176,6 @@ def api_roster_player_detail(request, team_code, player_id):
         'team': roster_entry.team_abbreviation.upper(),
         'team_name': roster_entry.team_name,
         'player': player_payload,
-        'predicted_aav': predicted_aav,
-        'predicted_aav_meta': predicted_aav_meta,
         'predicted_market_value': predicted_market_value,
         'predicted_market_value_meta': predicted_market_value_meta,
         'predicted_performance_value': predicted_performance_value,
