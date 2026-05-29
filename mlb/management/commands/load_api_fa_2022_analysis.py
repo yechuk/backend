@@ -11,7 +11,7 @@ from openpyxl import load_workbook
 from mlb.models import MLBApiFa2022Analysis, MLBApiStatLine
 
 
-DEFAULT_SOURCE_FILE = 'FA_2022_최종분석_v3.xlsx'
+DEFAULT_SOURCE_FILE = 'FA_2022_최종분석_v3_1.xlsx'
 DEFAULT_SEASON = 2022
 SHEET_VIEW_MAP = {
     '타자_메인': MLBApiStatLine.VIEW_BATTING,

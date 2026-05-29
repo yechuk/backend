@@ -11,10 +11,11 @@ from mlb.models import MLBApiAavPrediction, MLBApiStatLine
 
 
 SOURCE_LABEL = 'M1'
-SOURCE_FILE = 'M1_2022_전체선수.xlsx'
+SOURCE_FILE = 'FA_2022_최종분석_v3_1.xlsx'
+OLD_SOURCE_FILE = 'M1_2022_전체선수.xlsx'
 DEFAULT_SEASON = 2022
-BATTER_SHEET = '타자'
-PITCHER_SHEET = '투수'
+BATTER_SHEET = '타자_메인'
+PITCHER_SHEET = '투수_메인'
 
 
 def _normalize_name(value):
@@ -50,8 +51,10 @@ class Command(BaseCommand):
             raise CommandError(f'Workbook not found: {workbook_path}')
 
         if options['replace']:
-            deleted_count, _ = MLBApiAavPrediction.objects.filter(source_file=SOURCE_FILE).delete()
-            self.stdout.write(f'Deleted {deleted_count} existing rows from {SOURCE_FILE}.')
+            deleted_count, _ = MLBApiAavPrediction.objects.filter(
+                source_file__in=[OLD_SOURCE_FILE, SOURCE_FILE]
+            ).delete()
+            self.stdout.write(f'Deleted {deleted_count} existing rows (old M1 + new).')
 
         objects = self._load_workbook(workbook_path)
 
@@ -98,7 +101,7 @@ class Command(BaseCommand):
                 player_name = str(row[0] if len(row) > 0 else '').strip()
                 if not player_name:
                     continue
-                predicted_aav = _to_decimal(row[2] if len(row) > 2 else None)
+                predicted_aav = _to_decimal(row[8] if len(row) > 8 else None)
                 if predicted_aav is None:
                     continue
                 objects.append(
