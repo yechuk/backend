@@ -11,7 +11,7 @@ from openpyxl import load_workbook
 from mlb.models import MLBApiFa2022Analysis, MLBApiStatLine
 
 
-DEFAULT_SOURCE_FILE = 'FA_2022_최종분석_v3_1.xlsx'
+DEFAULT_SOURCE_FILE = 'FA_2022_최종분석_v4_1.xlsx'
 DEFAULT_SEASON = 2022
 SHEET_VIEW_MAP = {
     '타자_메인': MLBApiStatLine.VIEW_BATTING,
@@ -82,6 +82,12 @@ def _parse_is_boras(value):
 
 def _parse_position_scarcity(value):
     cleaned = _clean_text(value)
+    if '데이터없음' in cleaned:
+        return {
+            'position_scarcity_level': 'no_data',
+            'position_scarcity_war_threshold': None,
+            'position_scarcity_comp_count': None,
+        }
     if '과열 경고' in cleaned:
         level = 'overheated'
     elif '주의' in cleaned:
@@ -91,7 +97,8 @@ def _parse_position_scarcity(value):
     else:
         raise CommandError(f'Unexpected 포지션 희소성 level: {value!r}')
 
-    match = re.search(r'predWAR\s*([0-9.]+)\+\s*([0-9]+)명', cleaned)
+    # v4: 'WAR3.0+ FA N명', v3: 'predWAR3.0+ N명' (WAR substring matches both).
+    match = re.search(r'WAR\s*([0-9.]+)\+\s*(?:FA\s*)?([0-9]+)명', cleaned)
     if match is None:
         raise CommandError(f'Unexpected 포지션 희소성 format: {value!r}')
 
@@ -143,7 +150,7 @@ def _parse_team_specificity(value):
 
 
 class Command(BaseCommand):
-    help = 'Load API-facing 2022 FA analysis rows from the v3 final workbook.'
+    help = 'Load API-facing 2022 FA analysis rows from the v4 final workbook.'
 
     def add_arguments(self, parser):
         parser.add_argument(

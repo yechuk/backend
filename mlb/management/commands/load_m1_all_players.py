@@ -11,7 +11,8 @@ from mlb.models import MLBApiAavPrediction, MLBApiStatLine
 
 
 SOURCE_LABEL = 'M1'
-SOURCE_FILE = 'FA_2022_최종분석_v3_1.xlsx'
+SOURCE_FILE = 'FA_2022_최종분석_v4_1.xlsx'
+PREVIOUS_SOURCE_FILE = 'FA_2022_최종분석_v3_1.xlsx'
 OLD_SOURCE_FILE = 'M1_2022_전체선수.xlsx'
 DEFAULT_SEASON = 2022
 BATTER_SHEET = '타자_메인'
@@ -52,7 +53,7 @@ class Command(BaseCommand):
 
         if options['replace']:
             deleted_count, _ = MLBApiAavPrediction.objects.filter(
-                source_file__in=[OLD_SOURCE_FILE, SOURCE_FILE]
+                source_file__in=[OLD_SOURCE_FILE, PREVIOUS_SOURCE_FILE, SOURCE_FILE]
             ).delete()
             self.stdout.write(f'Deleted {deleted_count} existing rows (old M1 + new).')
 

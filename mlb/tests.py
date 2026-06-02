@@ -6,6 +6,7 @@ from django.core.management.base import CommandError
 from django.test import TestCase
 from openpyxl import Workbook
 
+from .management.commands.load_api_fa_2022_analysis import DEFAULT_SOURCE_FILE
 from .models import (
     MLBApiAavPrediction,
     MLBApiFa2022Analysis,
@@ -1997,7 +1998,7 @@ class LoadApiFa2022AnalysisCommandTests(TestCase):
             for row in pitching_rows or []:
                 pitching_sheet.append(row)
 
-        workbook.save(data_dir / 'FA_2022_최종분석_v3.xlsx')
+        workbook.save(data_dir / DEFAULT_SOURCE_FILE)
 
     def test_command_loads_batting_and_pitching_rows(self):
         with TemporaryDirectory() as temp_dir:
@@ -2007,14 +2008,14 @@ class LoadApiFa2022AnalysisCommandTests(TestCase):
                     (
                         'Carlos Correa', 'HOU', 'MIN', 'SS', '이적', 27.3, 4.186, 35.1, 21.98,
                         22.50, 40.00, 'NYM', 18.00, 'LAD',
-                        '주의\n동 포지션 predWAR3.0+ 2명', 'Boras', '전성기 프리미엄\n27.3세', '데이터없음',
+                        '🟡 주의\n동 포지션 WAR3.0+ FA 2명', 'Boras', '전성기 프리미엄\n27.3세', '데이터없음',
                     ),
                 ],
                 pitching_rows=[
                     (
                         'Max Scherzer', 'LAD', 'NYN', 'SP', '이적', 37.3, 2.659, 43.33, 40.66,
                         41.00, 50.00, 'BOS', 35.00, 'PIT',
-                        '안정\n동 포지션 predWAR3.0+ 0명', 'Boras', '에이징 리스크\n37.3세', '데이터없음',
+                        '⚪ 데이터없음\n2021 WAR 없음', 'Boras', '에이징 리스크\n37.3세', '데이터없음',
                     ),
                 ],
             )
@@ -2027,7 +2028,12 @@ class LoadApiFa2022AnalysisCommandTests(TestCase):
         self.assertEqual(batter.previous_team, 'HOU')
         self.assertFalse(batter.is_re_signing)
         self.assertEqual(float(batter.predicted_war), 4.186)
-        self.assertEqual(pitcher.position_scarcity_comp_count, 0)
+        self.assertEqual(batter.position_scarcity_level, 'caution')
+        self.assertEqual(float(batter.position_scarcity_war_threshold), 3.0)
+        self.assertEqual(batter.position_scarcity_comp_count, 2)
+        self.assertEqual(pitcher.position_scarcity_level, 'no_data')
+        self.assertIsNone(pitcher.position_scarcity_war_threshold)
+        self.assertIsNone(pitcher.position_scarcity_comp_count)
         self.assertTrue(pitcher.age_signal_is_aging_risk)
 
     def test_command_replace_deletes_existing_rows_before_load(self):
@@ -2045,7 +2051,7 @@ class LoadApiFa2022AnalysisCommandTests(TestCase):
                     (
                         'Carlos Correa', 'HOU', 'MIN', 'SS', '이적', 27.3, 4.186, 35.1, 21.98,
                         22.50, 40.00, 'NYM', 18.00, 'LAD',
-                        '주의\n동 포지션 predWAR3.0+ 2명', 'Boras', '전성기 프리미엄\n27.3세', '데이터없음',
+                        '🟡 주의\n동 포지션 WAR3.0+ FA 2명', 'Boras', '전성기 프리미엄\n27.3세', '데이터없음',
                     ),
                 ],
                 pitching_rows=[],
@@ -2091,7 +2097,7 @@ class LoadApiFa2022AnalysisCommandTests(TestCase):
                     (
                         'Carlos Correa', 'HOU', 'MIN', 'SS', '이적', 27.3, 4.186, 35.1, 21.98,
                         22.50, 40.00, 'NYM', 18.00, 'LAD',
-                        '주의\n동 포지션 predWAR3.0+ 2명', 'Boras', '알수없음\n27.3세', '데이터없음',
+                        '🟡 주의\n동 포지션 WAR3.0+ FA 2명', 'Boras', '알수없음\n27.3세', '데이터없음',
                     ),
                 ],
                 pitching_rows=[],
